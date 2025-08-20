@@ -1,0 +1,46 @@
+version: '3.8'
+
+# Расширение базового docker-compose.yml для разработки
+services:
+  faceit-bot:
+    # Переопределяем для режима разработки
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    
+    # Включаем отладку
+    environment:
+      - DEBUG=true
+      - PYTHONUNBUFFERED=1
+      - RELOAD=true
+    
+    # Монтируем код для hot-reload
+    volumes:
+      - .:/app:rw
+      - /app/__pycache__
+      - ./logs:/app/logs:rw
+      - ./data:/app/data:rw
+    
+    # Команда для разработки с автоперезагрузкой
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+    
+    # Отключаем ограничения ресурсов для разработки
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+
+  # Redis остается тот же, но с дополнительными настройками для разработки
+  redis:
+    # Включаем все команды Redis для отладки
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    
+    # Добавляем volume для персистентности данных в разработке
+    volumes:
+      - redis_dev_data:/data
+
+volumes:
+  redis_dev_data:
+    driver: local

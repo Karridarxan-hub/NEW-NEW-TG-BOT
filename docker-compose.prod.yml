@@ -1,0 +1,127 @@
+version: '3.8'
+
+# Продакшен конфигурация
+services:
+  faceit-bot:
+    # Продакшен настройки
+    environment:
+      - DEBUG=false
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    
+    # Restart policy для продакшена
+    restart: always
+    
+    # Убираем проброс портов - доступ только через nginx
+    ports: []
+    
+    # Логирование в продакшене
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+        labels: "service=faceit-bot"
+    
+    # Увеличенные лимиты для продакшена
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  redis:
+    # Продакшен конфигурация Redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000
+    
+    # Убираем проброс портов
+    ports: []
+    
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+        labels: "service=redis"
+    
+    # Ресурсы
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Nginx обязательно включен в продакшене
+  nginx:
+    restart: always
+    
+    # Только HTTPS в продакшене
+    ports:
+      - "80:80"   # Редирект на HTTPS
+      - "443:443" # HTTPS
+    
+    # SSL сертификаты
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_prod_logs:/var/log/nginx
+    
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+        labels: "service=nginx"
+    
+    # Ресурсы
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+  # Мониторинг (Prometheus exporter)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: faceit_node_exporter
+    restart: unless-stopped
+    
+    ports:
+      - "9100:9100"
+    
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    
+    networks:
+      - faceit-network
+    
+    profiles:
+      - monitoring
+
+volumes:
+  nginx_prod_logs:
+    driver: local

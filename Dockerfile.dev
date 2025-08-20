@@ -1,0 +1,58 @@
+# Development Dockerfile с дополнительными инструментами
+FROM python:3.11-slim as development
+
+# Устанавливаем системные зависимости для разработки
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    vim \
+    htop \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаем пользователя для разработки
+RUN groupadd --gid 1000 developer && \
+    useradd --uid 1000 --gid developer --shell /bin/bash --create-home developer
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Копируем и устанавливаем зависимости
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Устанавливаем дополнительные инструменты для разработки
+RUN pip install --no-cache-dir \
+    black \
+    flake8 \
+    isort \
+    mypy \
+    pre-commit \
+    ipython \
+    jupyter
+
+# Создаем директории для логов и данных
+RUN mkdir -p /app/logs /app/data && \
+    chown -R developer:developer /app
+
+# Переключаемся на пользователя разработчика
+USER developer
+
+# Настройка переменных окружения для разработки
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBUG=true
+
+# Открываем порты
+EXPOSE 8000 8001
+
+# Команда по умолчанию для разработки
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# Метаданные
+LABEL maintainer="FACEIT CS2 Bot Team"
+LABEL description="Development environment for FACEIT CS2 Bot"
+LABEL version="1.0.0-dev"

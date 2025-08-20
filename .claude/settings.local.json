@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(rmdir:*)",
+      "Bash(rm:*)",
+      "Bash(docker:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(mv:*)",
+      "Bash(powershell:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

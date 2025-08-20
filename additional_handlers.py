@@ -1,0 +1,613 @@
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+import re
+from datetime import datetime, timedelta
+
+from keyboards import *
+from faceit_client import faceit_client
+from storage import storage
+from match_handlers import calculate_player_stats_from_match
+from history_handlers import process_single_match
+
+
+class AdditionalStates(StatesGroup):
+    waiting_for_form_count = State()
+    waiting_for_player_nickname = State()
+    waiting_for_match_url = State()
+
+
+router = Router()
+
+
+# === АНАЛИЗ ФОРМЫ ===
+@router.callback_query(F.data == "form_analysis")
+async def form_analysis_menu(callback: CallbackQuery):
+    """Меню анализа формы"""
+    await callback.message.edit_text(
+        "📈 Анализ формы\n\nВыберите период для анализа:",
+        reply_markup=get_form_analysis_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("form_"))
+async def show_form_analysis(callback: CallbackQuery, state: FSMContext):
+    """Показать анализ формы"""
+    user_id = callback.from_user.id
+    faceit_id = storage.get_user_faceit_id(user_id)
+    
+    if not faceit_id:
+        await callback.message.edit_text(
+            "❌ Профиль не привязан. Используйте /start для привязки профиля.",
+            reply_markup=get_back_to_main_keyboard()
+        )
+        return
+    
+    action = callback.data.split("_")[1]
+    
+    if action == "custom":
+        await callback.message.edit_text(
+            "✏️ Введите количество матчей для анализа (от 10 до 100):",
+            reply_markup=get_back_keyboard("form_analysis")
+        )
+        await state.set_state(AdditionalStates.waiting_for_form_count)
+        await callback.answer()
+        return
+    
+    # Определяем количество матчей
+    match_counts = {"10": 10, "20": 20, "50": 50}
+    match_count = match_counts.get(action, 20)
+    
+    await process_form_analysis_request(callback, faceit_id, match_count)
+
+
+@router.message(AdditionalStates.waiting_for_form_count)
+async def process_custom_form_count(message: Message, state: FSMContext):
+    """Обработка пользовательского количества матчей для анализа формы"""
+    try:
+        count = int(message.text.strip())
+        if count < 10 or count > 100:
+            await message.answer("❌ Количество должно быть от 10 до 100. Попробуйте еще раз:")
+            return
+        
+        user_id = message.from_user.id
+        faceit_id = storage.get_user_faceit_id(user_id)
+        
+        if not faceit_id:
+            await message.answer(
+                "❌ Профиль не привязан. Используйте /start для привязки профиля.",
+                reply_markup=get_back_to_main_keyboard()
+            )
+            await state.clear()
+            return
+        
+        class FakeCallback:
+            def __init__(self, message):
+                self.message = message
+                self.from_user = message.from_user
+            async def answer(self):
+                """Фиктивный ответ для совместимости"""
+                return None
+        
+        fake_callback = FakeCallback(message)
+        await process_form_analysis_request(fake_callback, faceit_id, count)
+        await state.clear()
+        
+    except ValueError:
+        await message.answer("❌ Введите корректное число от 10 до 100:")
+
+
+async def process_form_analysis_request(callback, faceit_id: str, match_count: int):
+    """Обработать запрос анализа формы"""
+    await callback.message.edit_text("🔄 Анализируем форму...")
+    
+    # Получаем историю матчей
+    matches_data = await faceit_client.get_player_matches(faceit_id, limit=match_count)
+    
+    if not matches_data or not matches_data.get('items'):
+        await callback.message.edit_text(
+            "❌ Не удалось загрузить историю матчей.",
+            reply_markup=get_back_keyboard("form_analysis")
+        )
+        return
+    
+    matches = matches_data['items']
+    
+    if len(matches) < 10:
+        await callback.message.edit_text(
+            f"❌ Недостаточно матчей для анализа. Найдено: {len(matches)}, требуется минимум 10.",
+            reply_markup=get_back_keyboard("form_analysis")
+        )
+        return
+    
+    # Обрабатываем матчи
+    processed_matches = []
+    
+    for match in matches:
+        try:
+            match_id = match['match_id']
+            match_details = await faceit_client.get_match_details(match_id)
+            match_stats = await faceit_client.get_match_stats(match_id)
+            
+            if match_details and match_stats:
+                processed_match = await process_single_match(match_details, match_stats, faceit_id)
+                if processed_match:
+                    processed_matches.append(processed_match)
+        except:
+            continue
+    
+    if len(processed_matches) < 10:
+        await callback.message.edit_text(
+            "❌ Не удалось обработать достаточно матчей для анализа.",
+            reply_markup=get_back_keyboard("form_analysis")
+        )
+        return
+    
+    # Делим на два периода
+    mid_point = len(processed_matches) // 2
+    recent_matches = processed_matches[:mid_point]  # Более новые
+    older_matches = processed_matches[mid_point:]   # Более старые
+    
+    # Рассчитываем статистику для каждого периода
+    recent_stats = calculate_period_stats(recent_matches)
+    older_stats = calculate_period_stats(older_matches)
+    
+    # Формируем текст анализа
+    analysis_text = f"""📈 **Анализ формы** ({len(processed_matches)} матчей)
+
+📊 **Сравнение периодов:**
+🆕 **Недавние {len(recent_matches)} матчей** vs 📅 **Предыдущие {len(older_matches)} матчей**
+
+🏆 **Победы/Винрейт:**
+🆕 {recent_stats['wins']}/{recent_stats['total']} ({recent_stats['winrate']}%) vs 📅 {older_stats['wins']}/{older_stats['total']} ({older_stats['winrate']}%)
+📈 **Изменение:** {format_difference(recent_stats['winrate'] - older_stats['winrate'], '%', True)}
+
+💀 **K/D/A:**
+🆕 {recent_stats['avg_kills']:.1f}/{recent_stats['avg_deaths']:.1f}/{recent_stats['avg_assists']:.1f} vs 📅 {older_stats['avg_kills']:.1f}/{older_stats['avg_deaths']:.1f}/{older_stats['avg_assists']:.1f}
+
+⚔️ **K/D соотношение:**
+🆕 {recent_stats['avg_kd']:.2f} vs 📅 {older_stats['avg_kd']:.2f}
+📈 **Изменение:** {format_difference(recent_stats['avg_kd'] - older_stats['avg_kd'], '', True)}
+
+💥 **ADR:**
+🆕 {recent_stats['avg_adr']:.1f} vs 📅 {older_stats['avg_adr']:.1f}
+📈 **Изменение:** {format_difference(recent_stats['avg_adr'] - older_stats['avg_adr'], '', True)}
+
+🎯 **HLTV 2.1:**
+🆕 {recent_stats['avg_hltv']:.2f} vs 📅 {older_stats['avg_hltv']:.2f}
+📈 **Изменение:** {format_difference(recent_stats['avg_hltv'] - older_stats['avg_hltv'], '', True)}
+
+📊 **Общий тренд:** {analyze_trend(recent_stats, older_stats)}"""
+    
+    await callback.message.edit_text(
+        analysis_text,
+        reply_markup=get_back_keyboard("form_analysis"),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+def calculate_period_stats(matches: list) -> dict:
+    """Рассчитать статистику за период"""
+    if not matches:
+        return {}
+    
+    total_matches = len(matches)
+    wins = sum(1 for match in matches if match['won'])
+    
+    total_kills = sum(match['stats']['kills'] for match in matches)
+    total_deaths = sum(match['stats']['deaths'] for match in matches)
+    total_assists = sum(match['stats']['assists'] for match in matches)
+    
+    return {
+        'total': total_matches,
+        'wins': wins,
+        'winrate': round((wins / total_matches) * 100, 1),
+        'avg_kills': total_kills / total_matches,
+        'avg_deaths': total_deaths / total_matches,
+        'avg_assists': total_assists / total_matches,
+        'avg_kd': round(sum(match['stats']['kd_ratio'] for match in matches) / total_matches, 2),
+        'avg_adr': round(sum(match['stats']['adr'] for match in matches) / total_matches, 1),
+        'avg_hltv': round(sum(match['stats']['hltv_rating'] for match in matches) / total_matches, 2)
+    }
+
+
+def format_difference(diff: float, suffix: str = '', positive_is_good: bool = True) -> str:
+    """Форматировать разность с эмодзи"""
+    if diff > 0:
+        emoji = "📈" if positive_is_good else "📉"
+        return f"{emoji} +{diff:.2f}{suffix}"
+    elif diff < 0:
+        emoji = "📉" if positive_is_good else "📈"
+        return f"{emoji} {diff:.2f}{suffix}"
+    else:
+        return "➖ 0" + suffix
+
+
+def analyze_trend(recent: dict, older: dict) -> str:
+    """Анализировать общий тренд"""
+    improvements = 0
+    total_metrics = 0
+    
+    # Проверяем основные метрики
+    metrics = [
+        (recent['winrate'] - older['winrate'], True),
+        (recent['avg_kd'] - older['avg_kd'], True),
+        (recent['avg_adr'] - older['avg_adr'], True),
+        (recent['avg_hltv'] - older['avg_hltv'], True)
+    ]
+    
+    for diff, positive_is_good in metrics:
+        total_metrics += 1
+        if (positive_is_good and diff > 0) or (not positive_is_good and diff < 0):
+            improvements += 1
+    
+    improvement_rate = improvements / total_metrics
+    
+    if improvement_rate >= 0.75:
+        return "🔥 Отличная форма! Вы играете значительно лучше"
+    elif improvement_rate >= 0.5:
+        return "📈 Улучшение формы. Продолжайте в том же духе!"
+    elif improvement_rate >= 0.25:
+        return "🔄 Смешанные результаты. Есть прогресс в некоторых аспектах"
+    else:
+        return "📉 Снижение формы. Стоит проанализировать игру"
+
+
+# === СРАВНЕНИЕ ИГРОКОВ ===
+@router.callback_query(F.data == "player_comparison")
+async def player_comparison_menu(callback: CallbackQuery):
+    """Меню сравнения игроков"""
+    user_id = callback.from_user.id
+    players = storage.get_comparison_players(user_id)
+    
+    menu_text = f"⚔️ Сравнение игроков\n\nИгроков в списке: {len(players)}"
+    
+    if players:
+        menu_text += "\n\n👥 **Добавленные игроки:**"
+        for i, player in enumerate(players, 1):
+            menu_text += f"\n{i}. {player.get('nickname', 'Unknown')}"
+    
+    await callback.message.edit_text(
+        menu_text,
+        reply_markup=get_player_comparison_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "comparison_add_self")
+async def add_self_to_comparison(callback: CallbackQuery):
+    """Добавить себя в сравнение"""
+    user_id = callback.from_user.id
+    faceit_id = storage.get_user_faceit_id(user_id)
+    
+    if not faceit_id:
+        await callback.message.edit_text(
+            "❌ Профиль не привязан. Используйте /start для привязки профиля.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        return
+    
+    # Проверяем, не добавлен ли уже
+    players = storage.get_comparison_players(user_id)
+    if any(player.get('faceit_id') == faceit_id for player in players):
+        await callback.message.edit_text(
+            "❌ Вы уже добавлены в список для сравнения.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        return
+    
+    await callback.message.edit_text("🔄 Добавляем ваш профиль...")
+    
+    # Получаем данные игрока
+    player_data = await faceit_client.get_player_details(faceit_id)
+    stats_data = await faceit_client.get_player_stats(faceit_id)
+    
+    if not player_data or not stats_data:
+        await callback.message.edit_text(
+            "❌ Не удалось загрузить ваши данные.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        return
+    
+    formatted_stats = faceit_client.format_player_stats(player_data, stats_data)
+    
+    if formatted_stats:
+        formatted_stats['faceit_id'] = faceit_id
+        storage.add_comparison_player(user_id, formatted_stats)
+        
+        await callback.message.edit_text(
+            f"✅ Вы добавлены в список для сравнения!\n\nИгрок: {formatted_stats['nickname']}",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+    else:
+        await callback.message.edit_text(
+            "❌ Не удалось обработать ваши данные.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "comparison_add_player")
+async def add_player_to_comparison(callback: CallbackQuery, state: FSMContext):
+    """Добавить другого игрока в сравнение"""
+    await callback.message.edit_text(
+        "👤 Введите никнейм игрока для добавления в сравнение:",
+        reply_markup=get_back_keyboard("player_comparison")
+    )
+    await state.set_state(AdditionalStates.waiting_for_player_nickname)
+    await callback.answer()
+
+
+@router.message(AdditionalStates.waiting_for_player_nickname)
+async def process_comparison_player_nickname(message: Message, state: FSMContext):
+    """Обработка никнейма игрока для сравнения"""
+    nickname = message.text.strip()
+    user_id = message.from_user.id
+    
+    if len(nickname) < 2:
+        await message.answer("❌ Никнейм слишком короткий. Попробуйте еще раз:")
+        return
+    
+    await message.answer("🔍 Ищем игрока...")
+    
+    # Ищем игрока
+    player_data = await faceit_client.find_player_by_nickname(nickname)
+    
+    if not player_data:
+        await message.answer(
+            f"❌ Игрок '{nickname}' не найден на FACEIT. Попробуйте еще раз:",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        return
+    
+    faceit_id = player_data['player_id']
+    
+    # Проверяем, не добавлен ли уже
+    players = storage.get_comparison_players(user_id)
+    if any(player.get('faceit_id') == faceit_id for player in players):
+        await message.answer(
+            f"❌ Игрок {player_data['nickname']} уже добавлен в список.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        await state.clear()
+        return
+    
+    # Получаем статистику
+    stats_data = await faceit_client.get_player_stats(faceit_id)
+    
+    if not stats_data:
+        await message.answer(
+            f"❌ Не удалось загрузить статистику игрока {player_data['nickname']}.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        await state.clear()
+        return
+    
+    formatted_stats = faceit_client.format_player_stats(player_data, stats_data)
+    
+    if formatted_stats:
+        formatted_stats['faceit_id'] = faceit_id
+        storage.add_comparison_player(user_id, formatted_stats)
+        
+        await message.answer(
+            f"✅ Игрок {formatted_stats['nickname']} добавлен в список для сравнения!",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+    else:
+        await message.answer(
+            f"❌ Не удалось обработать данные игрока {player_data['nickname']}.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+    
+    await state.clear()
+
+
+@router.callback_query(F.data == "comparison_clear")
+async def clear_comparison_data(callback: CallbackQuery):
+    """Очистить данные сравнения"""
+    user_id = callback.from_user.id
+    storage.clear_comparison_data(user_id)
+    
+    await callback.message.edit_text(
+        "🗑️ Данные для сравнения очищены.",
+        reply_markup=get_back_keyboard("player_comparison")
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "comparison_get")
+async def get_player_comparison(callback: CallbackQuery):
+    """Получить сравнение игроков"""
+    user_id = callback.from_user.id
+    players = storage.get_comparison_players(user_id)
+    
+    if len(players) < 2:
+        await callback.message.edit_text(
+            "❌ Для сравнения нужно минимум 2 игрока. Добавьте еще игроков.",
+            reply_markup=get_back_keyboard("player_comparison")
+        )
+        return
+    
+    # Формируем сравнение
+    comparison_text = f"⚔️ **Сравнение игроков** ({len(players)} игроков)\n\n"
+    
+    # Заголовки метрик
+    metrics = [
+        ('Уровень', 'level'),
+        ('ELO', 'elo'),
+        ('Матчи', 'matches'),
+        ('Винрейт %', 'winrate'),
+        ('K/D', 'kd_ratio'),
+        ('ADR', 'adr'),
+        ('HLTV 2.1', 'hltv_rating')
+    ]
+    
+    for metric_name, metric_key in metrics:
+        comparison_text += f"📊 **{metric_name}:**\n"
+        
+        # Сортируем игроков по этой метрике
+        sorted_players = sorted(players, key=lambda p: p.get(metric_key, 0), reverse=True)
+        
+        for i, player in enumerate(sorted_players, 1):
+            value = player.get(metric_key, 0)
+            emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            
+            if metric_key in ['elo', 'matches']:
+                comparison_text += f"{emoji} {player['nickname']}: {value:,}\n"
+            elif metric_key in ['winrate', 'adr']:
+                comparison_text += f"{emoji} {player['nickname']}: {value:.1f}\n"
+            else:
+                comparison_text += f"{emoji} {player['nickname']}: {value}\n"
+        
+        comparison_text += "\n"
+    
+    await callback.message.edit_text(
+        comparison_text,
+        reply_markup=get_back_keyboard("player_comparison"),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# === АНАЛИЗ ТЕКУЩЕГО МАТЧА ===
+@router.callback_query(F.data == "current_match_analysis")
+async def current_match_analysis(callback: CallbackQuery, state: FSMContext):
+    """Анализ текущего матча"""
+    await callback.message.edit_text(
+        "🔍 Анализ текущего матча\n\nВведите ссылку на матч FACEIT:",
+        reply_markup=get_back_to_main_keyboard()
+    )
+    await state.set_state(AdditionalStates.waiting_for_match_url)
+    await callback.answer()
+
+
+@router.message(AdditionalStates.waiting_for_match_url)
+async def process_match_url(message: Message, state: FSMContext):
+    """Обработка ссылки на матч"""
+    url = message.text.strip()
+    
+    # Извлекаем ID матча из URL
+    match_id_pattern = r'faceit\.com/.*?/room/([a-f0-9-]+)'
+    match = re.search(match_id_pattern, url)
+    
+    if not match:
+        await message.answer(
+            "❌ Неверная ссылка на матч FACEIT. Попробуйте еще раз:\n"
+            "Пример: https://www.faceit.com/en/csgo/room/1-abc123..."
+        )
+        return
+    
+    match_id = match.group(1)
+    
+    await message.answer("🔄 Анализируем матч...")
+    
+    # Получаем данные матча
+    match_details = await faceit_client.get_match_details(match_id)
+    
+    if not match_details:
+        await message.answer(
+            "❌ Не удалось получить данные матча. Проверьте ссылку.",
+            reply_markup=get_back_to_main_keyboard()
+        )
+        await state.clear()
+        return
+    
+    # Анализируем команды
+    analysis_text = await analyze_match_teams(match_details)
+    
+    await message.answer(
+        analysis_text,
+        reply_markup=get_back_to_main_keyboard(),
+        parse_mode="Markdown"
+    )
+    await state.clear()
+
+
+async def analyze_match_teams(match_details: dict) -> str:
+    """Анализировать команды в матче"""
+    teams = match_details.get('teams', {})
+    team1 = teams.get('faction1', {})
+    team2 = teams.get('faction2', {})
+    
+    map_name = match_details.get('voting', {}).get('map', {}).get('pick', ['Unknown'])[0]
+    
+    analysis_text = f"🔍 **Анализ матча**\n\n🗺️ **Карта:** {map_name}\n\n"
+    
+    # Анализируем каждую команду
+    for team_num, team in enumerate([team1, team2], 1):
+        team_name = team.get('name', f'Команда {team_num}')
+        players = team.get('roster', [])
+        
+        analysis_text += f"{'🔵' if team_num == 1 else '🔴'} **{team_name}**\n"
+        
+        if not players:
+            analysis_text += "❓ Нет данных об игроках\n\n"
+            continue
+        
+        # Получаем статистику игроков
+        team_stats = []
+        for player in players:
+            player_id = player.get('player_id')
+            nickname = player.get('nickname', 'Unknown')
+            
+            if player_id:
+                try:
+                    # Получаем общую статистику игрока
+                    player_data = await faceit_client.get_player_details(player_id)
+                    stats_data = await faceit_client.get_player_stats(player_id)
+                    
+                    if player_data and stats_data:
+                        formatted_stats = faceit_client.format_player_stats(player_data, stats_data)
+                        if formatted_stats:
+                            team_stats.append(formatted_stats)
+                except:
+                    continue
+        
+        if team_stats:
+            # Рассчитываем средние показатели команды
+            avg_level = sum(p['level'] for p in team_stats) / len(team_stats)
+            avg_elo = sum(p['elo'] for p in team_stats) / len(team_stats)
+            avg_hltv = sum(p['hltv_rating'] for p in team_stats) / len(team_stats)
+            avg_winrate = sum(p['winrate'] for p in team_stats) / len(team_stats)
+            
+            # Находим лучшего и худшего игрока по HLTV
+            best_player = max(team_stats, key=lambda p: p['hltv_rating'])
+            worst_player = min(team_stats, key=lambda p: p['hltv_rating'])
+            
+            analysis_text += f"📊 **Средние показатели:**\n"
+            analysis_text += f"🏆 Уровень: {avg_level:.1f}\n"
+            analysis_text += f"⚡ ELO: {avg_elo:,.0f}\n"
+            analysis_text += f"📈 Винрейт: {avg_winrate:.1f}%\n"
+            analysis_text += f"🎯 HLTV: {avg_hltv:.2f}\n\n"
+            
+            analysis_text += f"🌟 **Сильнейший:** {best_player['nickname']} (HLTV: {best_player['hltv_rating']})\n"
+            analysis_text += f"⚠️ **Слабейший:** {worst_player['nickname']} (HLTV: {worst_player['hltv_rating']})\n\n"
+            
+            # Анализ по карте (если есть данные)
+            if 'maps' in team_stats[0] and map_name.lower() in [m.lower() for m in team_stats[0]['maps'].keys()]:
+                map_stats = []
+                for player in team_stats:
+                    for map_key, stats in player['maps'].items():
+                        if map_name.lower() in map_key.lower():
+                            map_stats.append(stats)
+                            break
+                
+                if map_stats:
+                    avg_map_winrate = sum(s['winrate'] for s in map_stats if s['matches'] > 0) / len([s for s in map_stats if s['matches'] > 0])
+                    analysis_text += f"🗺️ **На карте {map_name}:**\n"
+                    analysis_text += f"📈 Средний винрейт: {avg_map_winrate:.1f}%\n\n"
+        else:
+            analysis_text += "❓ Не удалось получить статистику игроков\n\n"
+    
+    # Общий прогноз
+    if len(team_stats) >= 2:
+        analysis_text += "🎯 **Прогноз:**\n"
+        analysis_text += "Анализ основан на общей статистике игроков.\n"
+        analysis_text += "Учитывайте текущую форму и командную игру!"
+    
+    return analysis_text

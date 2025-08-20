@@ -1,0 +1,170 @@
+# Docker Compose для FACEIT CS2 Bot
+
+services:
+  # Основной сервис бота
+  faceit-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: faceit_cs2_bot
+    restart: unless-stopped
+    
+    # Переменные окружения
+    environment:
+      - DEBUG=false
+      - PYTHONUNBUFFERED=1
+    
+    # Файл с переменными окружения
+    env_file:
+      - .env
+    
+    # Проброс портов для FastAPI (изменен внешний порт из-за конфликта)
+    ports:
+      - "8080:8000"
+    
+    # Монтирование volumes
+    volumes:
+      - ./logs:/app/logs:rw
+      - ./data:/app/data:rw
+    
+    # Health check для мониторинга
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Сетевые настройки
+    networks:
+      - faceit-network
+    
+    # Зависимости
+    depends_on:
+      - redis
+      - postgres
+    
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Redis для кэширования (опционально)
+  redis:
+    image: redis:7-alpine
+    container_name: faceit_redis
+    restart: unless-stopped
+    
+    # Проброс портов (изменен внешний порт из-за конфликта)
+    ports:
+      - "6380:6379"
+    
+    # Монтирование данных
+    volumes:
+      - redis_data:/data
+    
+    # Конфигурация Redis
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    
+    # Сеть
+    networks:
+      - faceit-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: faceit_postgres
+    restart: unless-stopped
+    
+    # Переменные окружения для PostgreSQL
+    environment:
+      POSTGRES_DB: faceit_bot
+      POSTGRES_USER: faceit_user
+      POSTGRES_PASSWORD: faceit_password
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    
+    # Проброс портов (для разработки)
+    ports:
+      - "5432:5432"
+    
+    # Монтирование данных и схемы
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    
+    # Сеть
+    networks:
+      - faceit-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U faceit_user -d faceit_bot"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Nginx reverse proxy (опционально)
+  nginx:
+    image: nginx:alpine
+    container_name: faceit_nginx
+    restart: unless-stopped
+    
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    
+    networks:
+      - faceit-network
+    
+    depends_on:
+      - faceit-bot
+    
+    # Только если нужен reverse proxy
+    profiles:
+      - proxy
+
+# Сети
+networks:
+  faceit-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+
+# Volumes
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  nginx_logs:
+    driver: local
