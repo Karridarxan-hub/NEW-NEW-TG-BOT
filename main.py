@@ -146,7 +146,8 @@ app = FastAPI(
     title="FACEIT CS2 Bot API",
     description="API для получения статистики игроков CS2 с FACEIT",
     version="2.1.3",
-    # 🎉 FINALE: Автодеплой полностью настроен и работает! (24.08.2025) 🚀
+    # 🏆 SUCCESS: Автодеплой GitHub Actions ПОЛНОСТЬЮ РАБОТАЕТ! (24.08.2025) ✅
+    # SSH ✅ | Docker ✅ | Health Check ✅ | Port Mapping ✅ | Database ✅
     lifespan=lifespan
 )
 
