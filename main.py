@@ -86,6 +86,39 @@ async def lifespan(app: FastAPI):
     polling_task = asyncio.create_task(start_polling())
     match_monitor_task = asyncio.create_task(match_monitoring_task())
     
+    # Запуск специализированных воркеров
+    from workers import (stats_analysis_worker, match_history_worker, 
+                        comparison_worker, notification_worker)
+    
+    # Создаем воркеры согласно конфигурации
+    worker_tasks = []
+    
+    # Stats analysis workers
+    for i in range(settings.stats_workers):
+        task = asyncio.create_task(stats_analysis_worker(worker_id=i))
+        worker_tasks.append(task)
+    
+    # Match history workers
+    for i in range(settings.history_workers):
+        task = asyncio.create_task(match_history_worker(worker_id=i))
+        worker_tasks.append(task)
+    
+    # Comparison workers
+    for i in range(settings.comparison_workers):
+        task = asyncio.create_task(comparison_worker(worker_id=i))
+        worker_tasks.append(task)
+    
+    # Notification workers
+    for i in range(settings.notification_workers):
+        task = asyncio.create_task(notification_worker(worker_id=i))
+        worker_tasks.append(task)
+    
+    logger.info(f"🚀 Запущено {len(worker_tasks)} специализированных воркеров:")
+    logger.info(f"   - Stats workers: {settings.stats_workers}")
+    logger.info(f"   - History workers: {settings.history_workers}")
+    logger.info(f"   - Comparison workers: {settings.comparison_workers}")
+    logger.info(f"   - Notification workers: {settings.notification_workers}")
+    
     try:
         yield
     finally:
@@ -95,16 +128,24 @@ async def lifespan(app: FastAPI):
         polling_task.cancel()
         match_monitor_task.cancel()
         
+        # Остановка воркеров
+        logger.info(f"🛑 Остановка {len(worker_tasks)} воркеров...")
+        for task in worker_tasks:
+            task.cancel()
+        
         # Закрытие подключений к БД
         await cleanup_storage()
         
-        # Ждем завершения задач
-        await asyncio.gather(cleanup_task, polling_task, match_monitor_task, return_exceptions=True)
+        # Ждем завершения всех задач
+        all_tasks = [cleanup_task, polling_task, match_monitor_task] + worker_tasks
+        await asyncio.gather(*all_tasks, return_exceptions=True)
+        
+        logger.info("✅ Все задачи и воркеры остановлены")
 
 app = FastAPI(
     title="FACEIT CS2 Bot API",
     description="API для получения статистики игроков CS2 с FACEIT",
-    version="2.1.1",
+    version="2.1.2",
     lifespan=lifespan
 )
 
@@ -114,7 +155,7 @@ async def root():
     """Главная страница API"""
     return {
         "message": "FACEIT CS2 Bot API",
-        "version": "2.1.1",
+        "version": "2.1.2",
         "status": "active",
         "endpoints": {
             "health": "/health",

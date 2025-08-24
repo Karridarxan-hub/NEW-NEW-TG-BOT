@@ -167,6 +167,49 @@ class LegacyStorageWrapper:
             return loop.run_until_complete(self.db.get_current_time())
         except:
             return None
+    
+    # Новые методы для поддержки воркеров
+    async def get_user_active_session(self, user_id: int):
+        """Получить активную сессию пользователя"""
+        try:
+            query = "SELECT * FROM user_sessions WHERE user_id = $1 AND session_end IS NULL ORDER BY session_start DESC LIMIT 1"
+            result = await self.db.pool.fetchrow(query, user_id)
+            return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting user active session: {e}")
+            return None
+    
+    async def update_session_stats(self, session_id: str, stats: dict):
+        """Обновить статистику сессии"""
+        try:
+            query = """
+                UPDATE user_sessions 
+                SET matches_count = $2, wins = $3, losses = $4, 
+                    total_kills = $5, total_deaths = $6, total_assists = $7,
+                    avg_adr = $8, avg_hltv_rating = $9
+                WHERE id = $1
+            """
+            await self.db.pool.execute(
+                query, session_id, 
+                stats.get('matches_count', 0),
+                stats.get('wins', 0), 
+                stats.get('losses', 0),
+                stats.get('total_kills', 0),
+                stats.get('total_deaths', 0),
+                stats.get('total_assists', 0),
+                stats.get('avg_adr', 0.0),
+                stats.get('avg_hltv_rating', 0.0)
+            )
+        except Exception as e:
+            logger.error(f"Error updating session stats: {e}")
+    
+    async def cache_data(self, key: str, data: dict, ttl_minutes: int = 15):
+        """Кэшировать данные с TTL"""
+        try:
+            expires_at = datetime.utcnow() + timedelta(minutes=ttl_minutes)
+            await self.set_cached_data(key, data, expires_at)
+        except Exception as e:
+            logger.error(f"Error caching data: {e}")
 
     # Совместимость со старыми свойствами
     @property

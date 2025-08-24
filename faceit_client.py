@@ -22,7 +22,8 @@ class FaceitAPIClient:
         }
         self.session = None
         self.logger = logging.getLogger(__name__)
-        self.rate_limit_delay = 1.0  # Базовая задержка между запросами
+        self.rate_limit_delay = 0.5  # Оптимизированная задержка между запросами
+        self.semaphore = asyncio.Semaphore(settings.concurrent_requests)  # Семафор для concurrent запросов
     
     async def _get_session(self) -> httpx.AsyncClient:
         """Получить HTTP сессию"""
@@ -35,7 +36,7 @@ class FaceitAPIClient:
     
     async def _make_request(self, endpoint: str, params: Optional[Dict] = None, 
                           cache_ttl: int = 300, retry_count: int = 3) -> Optional[Dict]:
-        """Выполнить HTTP запрос к API с улучшенной обработкой ошибок"""
+        """Выполнить HTTP запрос к API с улучшенной обработкой ошибок и concurrent контролем"""
         cache_key = f"faceit_{endpoint}_{json.dumps(params, sort_keys=True) if params else ''}"
         
         # Проверяем кэш с TTL
@@ -44,10 +45,12 @@ class FaceitAPIClient:
             self.logger.debug(f"Cache hit for {endpoint}")
             return cached_data
         
-        for attempt in range(retry_count):
-            try:
-                # Применяем rate limiting
-                await asyncio.sleep(self.rate_limit_delay)
+        # Используем семафор для контроля concurrent запросов
+        async with self.semaphore:
+            for attempt in range(retry_count):
+                try:
+                    # Применяем rate limiting
+                    await asyncio.sleep(self.rate_limit_delay)
                 
                 session = await self._get_session()
                 response = await session.get(f"{self.BASE_URL}{endpoint}", params=params)
@@ -988,6 +991,205 @@ class FaceitAPIClient:
         """Закрыть HTTP сессию"""
         if self.session and not self.session.is_closed:
             await self.session.aclose()
+    
+    # Новые методы для поддержки воркеров
+    
+    async def get_current_match(self, player_id: str) -> Optional[Dict]:
+        """Получить текущий матч игрока"""
+        try:
+            endpoint = f"/players/{player_id}/games/cs2/faceit"
+            matches = await self._make_request(endpoint, cache_ttl=60)
+            
+            if matches and matches.get('items'):
+                # Ищем текущий матч (started или ongoing)
+                for match in matches['items']:
+                    if match.get('status') in ['started', 'ongoing']:
+                        return match
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting current match: {e}")
+            return None
+    
+    async def analyze_match_participants(self, match: Dict) -> List[Dict]:
+        """Анализировать участников матча"""
+        try:
+            participants = []
+            teams = match.get('teams', [])
+            
+            for team in teams:
+                for player in team.get('players', []):
+                    player_id = player.get('player_id')
+                    if player_id:
+                        # Получаем базовую статистику игрока
+                        details = await self.get_player_details(player_id)
+                        stats = await self.get_player_stats(player_id)
+                        
+                        if details and stats:
+                            formatted_stats = self.format_player_stats(details, stats)
+                            participants.append(formatted_stats)
+            
+            return participants
+        except Exception as e:
+            self.logger.error(f"Error analyzing match participants: {e}")
+            return []
+    
+    async def analyze_player_form(self, matches: List[Dict]) -> Dict:
+        """Анализировать форму игрока по последним матчам"""
+        try:
+            if not matches:
+                return {}
+            
+            recent_matches = matches[:10]  # Последние 10 матчей
+            wins = sum(1 for match in recent_matches if match.get('result') == 'win')
+            total = len(recent_matches)
+            
+            # Анализ статистики
+            total_kills = sum(match.get('kills', 0) for match in recent_matches)
+            total_deaths = sum(match.get('deaths', 0) for match in recent_matches)
+            total_assists = sum(match.get('assists', 0) for match in recent_matches)
+            
+            avg_kd = total_kills / max(total_deaths, 1)
+            win_rate = (wins / total) * 100 if total > 0 else 0
+            
+            # Определение формы
+            if win_rate >= 70 and avg_kd >= 1.2:
+                form_status = "excellent"
+            elif win_rate >= 60 and avg_kd >= 1.0:
+                form_status = "good"
+            elif win_rate >= 40 and avg_kd >= 0.8:
+                form_status = "average"
+            else:
+                form_status = "poor"
+            
+            return {
+                'form_status': form_status,
+                'win_rate': round(win_rate, 1),
+                'avg_kd': round(avg_kd, 2),
+                'matches_analyzed': total,
+                'wins': wins,
+                'losses': total - wins
+            }
+        except Exception as e:
+            self.logger.error(f"Error analyzing player form: {e}")
+            return {}
+    
+    async def get_player_matches_since(self, player_id: str, since_time: datetime) -> List[Dict]:
+        """Получить матчи игрока с определенного времени"""
+        try:
+            all_matches = await self.get_player_matches(player_id, limit=50)
+            if not all_matches:
+                return []
+            
+            # Фильтруем матчи по времени
+            filtered_matches = []
+            for match in all_matches:
+                finished_at = match.get('finished_at')
+                if finished_at:
+                    match_time = datetime.fromtimestamp(finished_at, timezone.utc)
+                    if match_time >= since_time:
+                        filtered_matches.append(match)
+            
+            return filtered_matches
+        except Exception as e:
+            self.logger.error(f"Error getting matches since time: {e}")
+            return []
+    
+    async def calculate_session_stats(self, matches: List[Dict]) -> Dict:
+        """Рассчитать статистику сессии"""
+        try:
+            if not matches:
+                return {}
+            
+            total_matches = len(matches)
+            wins = sum(1 for match in matches if match.get('result') == 'win')
+            losses = total_matches - wins
+            
+            total_kills = sum(match.get('kills', 0) for match in matches)
+            total_deaths = sum(match.get('deaths', 0) for match in matches)
+            total_assists = sum(match.get('assists', 0) for match in matches)
+            
+            # Средние показатели
+            avg_kills = total_kills / total_matches if total_matches > 0 else 0
+            avg_deaths = total_deaths / total_matches if total_matches > 0 else 0
+            avg_kd = total_kills / max(total_deaths, 1)
+            win_rate = (wins / total_matches) * 100 if total_matches > 0 else 0
+            
+            return {
+                'matches_count': total_matches,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': round(win_rate, 1),
+                'total_kills': total_kills,
+                'total_deaths': total_deaths,
+                'total_assists': total_assists,
+                'avg_kills': round(avg_kills, 1),
+                'avg_deaths': round(avg_deaths, 1),
+                'avg_kd': round(avg_kd, 2)
+            }
+        except Exception as e:
+            self.logger.error(f"Error calculating session stats: {e}")
+            return {}
+    
+    async def create_comparison(self, player_data: List[Dict]) -> Dict:
+        """Создать сравнение игроков"""
+        try:
+            if len(player_data) < 2:
+                return {}
+            
+            comparison = {
+                'players': player_data,
+                'comparison_metrics': {},
+                'winner_by_metric': {}
+            }
+            
+            # Метрики для сравнения
+            metrics = ['level', 'elo', 'kd_ratio', 'adr', 'hltv_rating', 'winrate', 'headshot_percentage']
+            
+            for metric in metrics:
+                values = []
+                for player in player_data:
+                    value = player.get(metric, 0)
+                    values.append({'nickname': player.get('nickname', 'Unknown'), 'value': value})
+                
+                # Сортируем по убыванию и определяем лидера
+                values.sort(key=lambda x: x['value'], reverse=True)
+                comparison['comparison_metrics'][metric] = values
+                comparison['winner_by_metric'][metric] = values[0]['nickname'] if values else None
+            
+            return comparison
+        except Exception as e:
+            self.logger.error(f"Error creating comparison: {e}")
+            return {}
+    
+    async def create_enhanced_comparison(self, enhanced_data: List[Dict]) -> Dict:
+        """Создать расширенное сравнение с анализом формы"""
+        try:
+            if len(enhanced_data) < 2:
+                return {}
+            
+            base_comparison = await self.create_comparison([data['player'] for data in enhanced_data])
+            
+            # Добавляем анализ формы
+            form_analysis = []
+            for data in enhanced_data:
+                player = data['player']
+                form = data.get('form', {})
+                
+                form_analysis.append({
+                    'nickname': player.get('nickname', 'Unknown'),
+                    'form_status': form.get('form_status', 'unknown'),
+                    'recent_win_rate': form.get('win_rate', 0),
+                    'recent_kd': form.get('avg_kd', 0),
+                    'recent_matches': data.get('recent_matches', [])
+                })
+            
+            base_comparison['form_analysis'] = form_analysis
+            base_comparison['type'] = 'enhanced'
+            
+            return base_comparison
+        except Exception as e:
+            self.logger.error(f"Error creating enhanced comparison: {e}")
+            return {}
 
 
 async def test_faceit_client():
