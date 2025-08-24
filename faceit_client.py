@@ -51,55 +51,55 @@ class FaceitAPIClient:
                 try:
                     # Применяем rate limiting
                     await asyncio.sleep(self.rate_limit_delay)
-                
-                session = await self._get_session()
-                response = await session.get(f"{self.BASE_URL}{endpoint}", params=params)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    await storage.set_cached_data(cache_key, data)
-                    self.logger.debug(f"API request successful: {endpoint}")
-                    return data
                     
-                elif response.status_code == 429:  # Rate limit
-                    wait_time = min(60 * (2 ** attempt), 300)  # Exponential backoff, max 5 min
-                    self.logger.warning(f"Rate limited, waiting {wait_time}s")
-                    await asyncio.sleep(wait_time)
-                    continue
+                    session = await self._get_session()
+                    response = await session.get(f"{self.BASE_URL}{endpoint}", params=params)
                     
-                elif response.status_code == 404:
-                    self.logger.warning(f"Resource not found: {endpoint}")
-                    return None
-                    
-                elif response.status_code == 401:
-                    self.logger.error("Invalid API key")
-                    return None
-                    
-                elif response.status_code in [500, 502, 503, 504]:  # Server errors - retry with backoff
-                    wait_time = min(2 ** attempt, 8)  # Max 8 seconds delay
-                    self.logger.warning(f"Server error {response.status_code}, retrying in {wait_time}s (attempt {attempt + 1}/{retry_count})")
-                    if attempt == retry_count - 1:
-                        self.logger.error(f"Final attempt failed for {endpoint}: {response.status_code} - {response.text}")
+                    if response.status_code == 200:
+                        data = response.json()
+                        await storage.set_cached_data(cache_key, data)
+                        self.logger.debug(f"API request successful: {endpoint}")
+                        return data
+                        
+                    elif response.status_code == 429:  # Rate limit
+                        wait_time = min(60 * (2 ** attempt), 300)  # Exponential backoff, max 5 min
+                        self.logger.warning(f"Rate limited, waiting {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+                        
+                    elif response.status_code == 404:
+                        self.logger.warning(f"Resource not found: {endpoint}")
                         return None
-                    await asyncio.sleep(wait_time)
+                        
+                    elif response.status_code == 401:
+                        self.logger.error("Invalid API key")
+                        return None
+                        
+                    elif response.status_code in [500, 502, 503, 504]:  # Server errors - retry with backoff
+                        wait_time = min(2 ** attempt, 8)  # Max 8 seconds delay
+                        self.logger.warning(f"Server error {response.status_code}, retrying in {wait_time}s (attempt {attempt + 1}/{retry_count})")
+                        if attempt == retry_count - 1:
+                            self.logger.error(f"Final attempt failed for {endpoint}: {response.status_code} - {response.text}")
+                            return None
+                        await asyncio.sleep(wait_time)
+                        
+                    else:
+                        self.logger.error(f"FACEIT API Error: {response.status_code} - {response.text}")
+                        if attempt == retry_count - 1:
+                            return None
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
                     
-                else:
-                    self.logger.error(f"FACEIT API Error: {response.status_code} - {response.text}")
+                except httpx.TimeoutException:
+                    self.logger.warning(f"Timeout for {endpoint}, attempt {attempt + 1}")
                     if attempt == retry_count - 1:
                         return None
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    
-            except httpx.TimeoutException:
-                self.logger.warning(f"Timeout for {endpoint}, attempt {attempt + 1}")
-                if attempt == retry_count - 1:
-                    return None
-                await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2 ** attempt)
                 
-            except Exception as e:
-                self.logger.error(f"HTTP Request Error: {e}")
-                if attempt == retry_count - 1:
-                    return None
-                await asyncio.sleep(2 ** attempt)
+                except Exception as e:
+                    self.logger.error(f"HTTP Request Error: {e}")
+                    if attempt == retry_count - 1:
+                        return None
+                    await asyncio.sleep(2 ** attempt)
         
         return None
     
