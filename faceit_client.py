@@ -587,6 +587,30 @@ class FaceitAPIClient:
             # Fallback к lifetime если нет данных в segments
             avg_headshot_percentage = round(safe_float(lifetime_stats.get('Average Headshots %', 0)), 1)
         
+        # Рассчитываем клатч-статистику из segments (только CS2 данные)
+        segments_clutch_1v1_total = 0
+        segments_clutch_1v1_wins = 0
+        segments_clutch_1v2_total = 0
+        segments_clutch_1v2_wins = 0
+        
+        for map_stat in map_stats:
+            map_data = map_stat.get('stats', {})
+            if map_data:
+                # Суммируем клатч-статистику по картам
+                segments_clutch_1v1_total += safe_int(map_data.get('Total 1v1 Count', 0))
+                segments_clutch_1v1_wins += safe_int(map_data.get('Total 1v1 Wins', 0))
+                segments_clutch_1v2_total += safe_int(map_data.get('Total 1v2 Count', 0))
+                segments_clutch_1v2_wins += safe_int(map_data.get('Total 1v2 Wins', 0))
+        
+        # Используем segments для клатчей если есть данные, иначе fallback на lifetime
+        clutch_1v1_total = segments_clutch_1v1_total if segments_clutch_1v1_total > 0 else safe_int(lifetime_stats.get('Total 1v1 Count', 0))
+        clutch_1v1_wins = segments_clutch_1v1_wins if segments_clutch_1v1_total > 0 else safe_int(lifetime_stats.get('Total 1v1 Wins', 0))
+        clutch_1v1_percentage = round((clutch_1v1_wins / clutch_1v1_total) * 100, 1) if clutch_1v1_total > 0 else 0.0
+        
+        clutch_1v2_total = segments_clutch_1v2_total if segments_clutch_1v2_total > 0 else safe_int(lifetime_stats.get('Total 1v2 Count', 0))
+        clutch_1v2_wins = segments_clutch_1v2_wins if segments_clutch_1v2_total > 0 else safe_int(lifetime_stats.get('Total 1v2 Wins', 0))
+        clutch_1v2_percentage = round((clutch_1v2_wins / clutch_1v2_total) * 100, 1) if clutch_1v2_total > 0 else 0.0
+        
         # Добавляем мульти-киллы в formatted
         formatted.update({
             'total_triple_kills': total_triple_kills,
@@ -595,15 +619,15 @@ class FaceitAPIClient:
             'total_aces': total_penta_kills,  # Эйсы = Penta Kills
             'total_mvps': total_mvps,
             'total_rounds': total_rounds,
-            'multi_kills_per_round': round((total_triple_kills + total_quadro_kills + total_penta_kills) / max(total_rounds, 1), 3) if total_rounds > 0 else 0,
+            'multi_kills_per_match': round((total_triple_kills + total_quadro_kills + total_penta_kills) / max(correct_matches, 1), 3) if correct_matches > 0 else 0,
             
-            # Клатчи из lifetime
-            'clutch_1v1_total': safe_int(lifetime_stats.get('Total 1v1 Count', 0)),
-            'clutch_1v1_wins': safe_int(lifetime_stats.get('Total 1v1 Wins', 0)),
-            'clutch_1v1_percentage': round(safe_float(lifetime_stats.get('1v1 Win Rate', 0)) * 100, 1),
-            'clutch_1v2_total': safe_int(lifetime_stats.get('Total 1v2 Count', 0)),
-            'clutch_1v2_wins': safe_int(lifetime_stats.get('Total 1v2 Wins', 0)),
-            'clutch_1v2_percentage': round(safe_float(lifetime_stats.get('1v2 Win Rate', 0)) * 100, 1),
+            # Клатчи из segments (приоритет CS2) с fallback на lifetime
+            'clutch_1v1_total': clutch_1v1_total,
+            'clutch_1v1_wins': clutch_1v1_wins,
+            'clutch_1v1_percentage': clutch_1v1_percentage,
+            'clutch_1v2_total': clutch_1v2_total,
+            'clutch_1v2_wins': clutch_1v2_wins,
+            'clutch_1v2_percentage': clutch_1v2_percentage,
             
             # Средний процент хедшотов (рассчитанный из segments)
             'avg_headshot_percentage': avg_headshot_percentage

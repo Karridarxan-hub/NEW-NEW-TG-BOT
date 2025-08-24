@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from typing import List, Dict, Any, Optional, Tuple
 import logging
+import asyncio
 from datetime import datetime
 
 from keyboards import get_form_analysis_keyboard, get_main_menu_keyboard
@@ -57,7 +58,7 @@ async def ask_custom_form_count(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         "✏️ <b>Анализ формы - ввод вручную</b>\n\n"
-        "Введите количество матчей для каждого периода (от 5 до 100):\n"
+        "Введите количество матчей для каждого периода (от 5 до 200):\n"
         "Например: <code>25</code>\n\n"
         "❗ Будет проведено сравнение последних N матчей с предыдущими N матчами",
         parse_mode="HTML"
@@ -71,9 +72,9 @@ async def process_custom_form_count(message: Message, state: FSMContext):
     try:
         match_count = int(message.text.strip())
         
-        if not 5 <= match_count <= 100:
+        if not 5 <= match_count <= 200:
             await message.answer(
-                "❌ Количество матчей должно быть от 5 до 100.\n"
+                "❌ Количество матчей должно быть от 5 до 200.\n"
                 "Попробуйте еще раз:"
             )
             return
@@ -94,7 +95,7 @@ async def process_custom_form_count(message: Message, state: FSMContext):
         
     except ValueError:
         await message.answer(
-            "❌ Неверный формат! Введите число от 5 до 100:"
+            "❌ Неверный формат! Введите число от 5 до 200:"
         )
 
 async def perform_form_analysis(callback, match_count: int):
@@ -224,29 +225,42 @@ async def analyze_matches_period(matches: List[Dict], faceit_id: str, period_nam
     if not matches:
         return stats
     
+    # Определяем результаты матчей (быстро)
     for match in matches:
-        # Определяем результат матча
         player_result = faceit_client._determine_player_result(match, faceit_id)
-        
         if player_result is True:
             stats['wins'] += 1
         elif player_result is False:
             stats['losses'] += 1
-        
-        # Получаем детальную статистику матча
+    
+    # Параллельная загрузка детальной статистики матчей
+    semaphore = asyncio.Semaphore(5)  # Ограничиваем до 5 одновременных запросов
+    
+    async def get_match_detailed_stats(match):
+        """Получить детальную статистику одного матча"""
         match_id = match.get('match_id')
-        if match_id:
+        if not match_id:
+            return None
+            
+        async with semaphore:
             try:
                 match_stats = await faceit_client.get_match_stats(match_id)
                 if match_stats and 'rounds' in match_stats:
-                    player_match_stats = extract_player_stats_from_match(match_stats, faceit_id)
-                    if player_match_stats:
-                        stats['detailed_matches'] += 1
-                        merge_player_stats(stats, player_match_stats)
-                        
+                    return extract_player_stats_from_match(match_stats, faceit_id)
+                return None
             except Exception as e:
                 logger.debug(f"Не удалось получить статистику матча {match_id}: {e}")
-                continue
+                return None
+    
+    # Запускаем параллельную загрузку
+    tasks = [get_match_detailed_stats(match) for match in matches]
+    detailed_stats_results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Обрабатываем результаты
+    for result in detailed_stats_results:
+        if result and not isinstance(result, Exception):
+            stats['detailed_matches'] += 1
+            merge_player_stats(stats, result)
     
     # Рассчитываем итоговые показатели
     calculate_final_stats(stats)
