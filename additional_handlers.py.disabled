@@ -278,7 +278,7 @@ async def player_comparison_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "comparison_add_self")
+@router.callback_query(F.data == "comparison_add_self_OLD")
 async def add_self_to_comparison(callback: CallbackQuery):
     """Добавить себя в сравнение"""
     user_id = callback.from_user.id
@@ -332,7 +332,7 @@ async def add_self_to_comparison(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "comparison_add_player")
+@router.callback_query(F.data == "comparison_add_player_OLD")
 async def add_player_to_comparison(callback: CallbackQuery, state: FSMContext):
     """Добавить другого игрока в сравнение"""
     await callback.message.edit_text(

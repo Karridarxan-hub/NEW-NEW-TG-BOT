@@ -69,7 +69,7 @@ async def show_overall_stats(callback: CallbackQuery):
         user_data = await storage.get_user(user_id)
         nickname = user_data.get('nickname', 'Unknown') if user_data else 'Unknown'
         
-        # ИСПРАВЛЕНО: Убираем await - calculate_hltv_rating это sync метод
+        # ИСПРАВЛЕНО: Убираем await - calculate_player_rating это sync метод
         # Данные уже рассчитаны в format_player_stats
         hltv_rating = formatted_stats.get('hltv_rating', 0.0)
         
@@ -85,7 +85,7 @@ async def show_overall_stats(callback: CallbackQuery):
 👤 **Игрок:** {nickname}
 🎮 **Уровень:** {current_level} | **ELO:** {current_elo}
 ⬆️ **До след. уровня:** {elo_to_next_level if elo_to_next_level > 0 else 'Максимум'}
-⭐ **HLTV Rating 2.1:** {hltv_rating:.3f}
+⭐ **Рейтинг игрока:** {hltv_rating:.3f}
 🌍 **Регион:** {formatted_stats.get('region', 'N/A')}
 ✅ **Верифицирован:** {'Да' if formatted_stats.get('verified', False) else 'Нет'}
 
@@ -100,18 +100,8 @@ async def show_overall_stats(callback: CallbackQuery):
 • **Килов за раунд:** {formatted_stats.get('kpr', 0):.3f}
 • **Хедшотов:** {formatted_stats.get('headshots_avg', 0):.1f}%
 
-💥 **Урон и поддержка:**
+💥 **Урон:**
 • **ADR:** {formatted_stats.get('adr', 0):.1f}
-• **KAST:** {formatted_stats.get('kast', 0):.1f}%
-• **Flash Assists:** {formatted_stats.get('flash_assists', 0)}
-
-🎯 **Первые действия:**
-• **First Kills:** {formatted_stats.get('first_kills', 0)}
-• **First Deaths:** {formatted_stats.get('first_deaths', 0)}
-
-💣 **Утилити урон:**
-• **Урон с гранат:** {formatted_stats.get('utility_damage', 0)}
-• **Ослеплено врагов:** {formatted_stats.get('enemies_flashed', 0)}
 
 _Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}_
 """
@@ -219,7 +209,7 @@ async def show_maps_stats(callback: CallbackQuery):
             message += f"💥 ADR: **{adr:.1f}**\n"
             message += f"🎯 KAST: **{kast:.1f}%**\n"
             message += f"🎧 HS%: **{headshots:.1f}%**\n"
-            message += f"⭐ HLTV: **{hltv_rating:.2f}**\n\n"
+            message += f"⭐ Рейтинг: **{hltv_rating:.2f}**\n\n"
         
         if len(message.split('\n')) <= 3:  # Если нет данных
             message += "_Недостаточно данных для отображения статистики по картам._"
@@ -326,7 +316,7 @@ async def show_session_stats(callback: CallbackQuery):
         session_end = latest_session[0]['parsed_time'].strftime('%d.%m %H:%M')
         
         message = f"""
-⏰ **Статистика последней сессии**
+⏰ **Статистика по сессиям**
 
 🕒 **Период:** {session_start} - {session_end}
 📊 **Результаты:**
@@ -336,7 +326,7 @@ async def show_session_stats(callback: CallbackQuery):
 
 📈 **Игровые показатели:**
 • K/D: {session_stats['kd_ratio']:.3f}
-• HLTV Rating: {session_stats['hltv_rating']:.3f}
+• Рейтинг игрока: {session_stats['hltv_rating']:.3f}
 • ADR: {session_stats['adr']:.1f}
 
 📋 **Матчи сессии:**
@@ -399,7 +389,7 @@ async def analyze_session_stats(session_matches: List[Dict], faceit_id: str) -> 
             match_results.append("🏆")
         elif player_won is False:
             losses += 1
-            match_results.append("💔")
+            match_results.append("❌")
         else:
             match_results.append("❓")
         
@@ -429,7 +419,7 @@ async def analyze_session_stats(session_matches: List[Dict], faceit_id: str) -> 
     adr = (total_damage / total_rounds) if total_rounds > 0 else 0
     winrate = (wins / total_matches * 100) if total_matches > 0 else 0
     
-    # Приближенный HLTV рейтинг для сессии
+    # Приближенный рейтинг игрока для сессии
     if total_rounds > 0:
         kpr = total_kills / total_rounds
         dpr = total_deaths / total_rounds

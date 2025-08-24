@@ -178,7 +178,7 @@ async def perform_form_analysis(callback, match_count: int):
         
         await callback.message.edit_text(
             message_text,
-            reply_markup=get_form_analysis_keyboard(),
+            reply_markup=None,
             parse_mode="HTML",
             disable_web_page_preview=True
         )
@@ -215,7 +215,7 @@ async def analyze_matches_period(matches: List[Dict], faceit_id: str, period_nam
         'flash_assists': 0,
         'kast_rounds': 0,
         'kast_percentage': 0.0,
-        'hltv_rating': 0.0,
+        'player_rating': 0.0,
         'first_kills': 0,
         'first_deaths': 0,
         'detailed_matches': 0  # Количество матчей с детальной статистикой
@@ -315,24 +315,6 @@ def calculate_final_stats(stats: Dict):
     if stats['total_rounds'] > 0:
         stats['adr'] = stats['total_damage'] / stats['total_rounds']
     
-    # KAST процент (приблизительный расчет)
-    if stats['total_rounds'] > 0:
-        stats['kast_percentage'] = (stats['kast_rounds'] / stats['total_rounds']) * 100
-    
-    # HLTV Rating 2.1 (упрощенная формула)
-    if stats['total_rounds'] > 0:
-        kpr = stats['kills'] / stats['total_rounds']
-        dpr = stats['deaths'] / stats['total_rounds'] if stats['total_rounds'] > 0 else 0
-        impact_rating = kpr  # Упрощение
-        
-        stats['hltv_rating'] = max(0.0, 
-            0.0073 * stats['kast_percentage'] + 
-            0.3591 * kpr - 
-            0.5329 * dpr + 
-            0.2372 * impact_rating + 
-            0.0032 * stats['adr'] + 
-            0.1587
-        )
 
 async def format_form_analysis_result(
     recent_stats: Dict, 
@@ -364,9 +346,7 @@ async def format_form_analysis_result(
     recent_coverage = (recent_stats['detailed_matches'] / recent_stats['total_matches']) * 100 if recent_stats['total_matches'] > 0 else 0
     previous_coverage = (previous_stats['detailed_matches'] / previous_stats['total_matches']) * 100 if previous_stats['total_matches'] > 0 else 0
     
-    message += f"\n<i>ℹ️ Детальная статистика доступна для {recent_stats['detailed_matches']}/{recent_stats['total_matches']} "
-    message += f"и {previous_stats['detailed_matches']}/{previous_stats['total_matches']} матчей соответственно</i>\n"
-    message += f"<i>📅 Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}</i>"
+    message += f"\n<i>📅 Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}</i>"
     
     return message
 
@@ -376,14 +356,10 @@ def format_period_stats(stats: Dict) -> str:
     
     # Показываем детальную статистику только если есть данные
     if stats['detailed_matches'] > 0:
-        text += f"• ⚔️ K/D: {stats['kd_ratio']:.3f} "
+        text += f"• ⚔️ K/D: {stats['kd_ratio']:.2f} "
         text += f"(K:{stats['kills']} D:{stats['deaths']} A:{stats['assists']})\n"
         text += f"• 🎯 Хедшоты: {stats['headshot_percentage']:.1f}%\n"
         text += f"• 💥 ADR: {stats['adr']:.1f}\n"
-        text += f"• ⭐ HLTV: {stats['hltv_rating']:.3f}\n"
-        text += f"• 🎪 KAST: {stats['kast_percentage']:.1f}%\n"
-        text += f"• ⚡ Flash Assists: {stats['flash_assists']}\n"
-        text += f"• 🔫 First Kills/Deaths: {stats['first_kills']}/{stats['first_deaths']}\n"
     else:
         text += "<i>Детальная статистика недоступна</i>\n"
     
@@ -410,34 +386,11 @@ def format_comparison(recent: Dict, previous: Dict) -> str:
         adr_emoji = "📈" if adr_diff > 0 else "📉" if adr_diff < 0 else "➡️"
         comparisons.append(f"• ADR: {adr_emoji} {adr_diff:+.1f}")
         
-        # HLTV Rating
-        hltv_diff = recent['hltv_rating'] - previous['hltv_rating']
-        hltv_emoji = "📈" if hltv_diff > 0 else "📉" if hltv_diff < 0 else "➡️"
-        comparisons.append(f"• HLTV: {hltv_emoji} {hltv_diff:+.3f}")
         
         # Хедшоты
         hs_diff = recent['headshot_percentage'] - previous['headshot_percentage']
         hs_emoji = "📈" if hs_diff > 0 else "📉" if hs_diff < 0 else "➡️"
         comparisons.append(f"• Хедшоты: {hs_emoji} {hs_diff:+.1f}%")
-        
-        # KAST
-        kast_diff = recent['kast_percentage'] - previous['kast_percentage']
-        kast_emoji = "📈" if kast_diff > 0 else "📉" if kast_diff < 0 else "➡️"
-        comparisons.append(f"• KAST: {kast_emoji} {kast_diff:+.1f}%")
-        
-        # First Kills
-        fk_recent_ratio = recent['first_kills'] / recent['total_matches'] if recent['total_matches'] > 0 else 0
-        fk_previous_ratio = previous['first_kills'] / previous['total_matches'] if previous['total_matches'] > 0 else 0
-        fk_diff = fk_recent_ratio - fk_previous_ratio
-        fk_emoji = "📈" if fk_diff > 0 else "📉" if fk_diff < 0 else "➡️"
-        comparisons.append(f"• First Kills/игру: {fk_emoji} {fk_diff:+.2f}")
-        
-        # Flash Assists
-        fa_recent_ratio = recent['flash_assists'] / recent['total_matches'] if recent['total_matches'] > 0 else 0
-        fa_previous_ratio = previous['flash_assists'] / previous['total_matches'] if previous['total_matches'] > 0 else 0
-        fa_diff = fa_recent_ratio - fa_previous_ratio
-        fa_emoji = "📈" if fa_diff > 0 else "📉" if fa_diff < 0 else "➡️"
-        comparisons.append(f"• Flash Assists/игру: {fa_emoji} {fa_diff:+.1f}")
         
     else:
         comparisons.append("<i>Недостаточно данных для детального сравнения</i>")

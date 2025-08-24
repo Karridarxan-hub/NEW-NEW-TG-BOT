@@ -6,6 +6,7 @@ import json
 import logging
 from config import settings
 from storage import storage
+from bot.services.cache_service import CacheService
 
 
 class FaceitAPIClient:
@@ -141,8 +142,70 @@ class FaceitAPIClient:
         return await self._make_request(f"/matches/{match_id}")
     
     async def get_match_stats(self, match_id: str) -> Optional[Dict[str, Any]]:
-        """Получить статистику матча"""
-        return await self._make_request(f"/matches/{match_id}/stats")
+        """Получить статистику матча с кэшированием"""
+        # Кэшируем статистику матчей на 10 минут (600 секунд)
+        return await self._make_request(f"/matches/{match_id}/stats", cache_ttl=600)
+    
+    async def get_player_stats_from_match(self, match_id: str, faceit_id: str) -> Optional[Dict[str, Any]]:
+        """Получить статистику конкретного игрока из матча"""
+        try:
+            # Получаем полную статистику матча
+            match_stats = await self.get_match_stats(match_id)
+            if not match_stats:
+                self.logger.warning(f"No match stats found for match {match_id}")
+                return None
+            
+            # Ищем игрока в данных матча
+            rounds = match_stats.get('rounds', [])
+            if not rounds:
+                self.logger.warning(f"No rounds data in match {match_id}")
+                return None
+            
+            # Проходим по командам и игрокам в первом раунде
+            for round_data in rounds:
+                teams = round_data.get('teams', [])
+                for team in teams:
+                    players = team.get('players', [])
+                    for player in players:
+                        if player.get('player_id') == faceit_id:
+                            # Нашли нашего игрока
+                            player_stats = player.get('player_stats', {})
+                            if player_stats:
+                                # Безопасное извлечение статистики
+                                def safe_int(value, default=0):
+                                    try:
+                                        return int(float(str(value)))
+                                    except (ValueError, TypeError):
+                                        return default
+                                
+                                def safe_float(value, default=0.0):
+                                    try:
+                                        return float(str(value))
+                                    except (ValueError, TypeError):
+                                        return default
+                                
+                                extracted_stats = {
+                                    'kills': safe_int(player_stats.get('Kills', 0)),
+                                    'deaths': safe_int(player_stats.get('Deaths', 0)),
+                                    'assists': safe_int(player_stats.get('Assists', 0)),
+                                    'adr': safe_float(player_stats.get('ADR', 0.0)),
+                                    'kast': safe_float(player_stats.get('KAST %', 0.0)),
+                                    'headshots': safe_float(player_stats.get('Headshots %', 0.0)),
+                                    'first_kills': safe_int(player_stats.get('First Kills', 0)),
+                                    'first_deaths': safe_int(player_stats.get('First Deaths', 0)),
+                                    'flash_assists': safe_int(player_stats.get('Flash Assists', 0)),
+                                    'rounds': safe_int(player_stats.get('Rounds', 16))  # Обычно 16+ раундов
+                                }
+                                
+                                self.logger.debug(f"Extracted stats for player {faceit_id} in match {match_id}: {extracted_stats}")
+                                return extracted_stats
+                            
+            self.logger.warning(f"Player {faceit_id} not found in match {match_id}")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting player stats from match {match_id}: {e}")
+            return None
     
     def calculate_hltv_rating(self, stats: Dict[str, Any]) -> float:
         """Рассчитать HLTV 2.1 рейтинг с улучшенной обработкой данных"""
@@ -179,10 +242,24 @@ class FaceitAPIClient:
             kast = safe_float(stats.get('KAST %', stats.get('kast', 0)))
             
             # Дополнительные метрики для более точного расчета
-            first_kills = safe_int(stats.get('First Kills', stats.get('first_kills', 0)))
+            # Поддержка различных названий полей в API
+            first_kills = safe_int(stats.get('First Kills', stats.get('Total Entry Wins', stats.get('first_kills', 0))))
             first_deaths = safe_int(stats.get('First Deaths', stats.get('first_deaths', 0)))
-            flash_assists = safe_int(stats.get('Flash Assists', stats.get('flash_assists', 0)))
-            utility_damage = safe_int(stats.get('Utility Damage', stats.get('utility_damage', 0)))
+            # Если нет First Deaths, рассчитываем из Total Entry Count - Total Entry Wins
+            if first_deaths == 0 and 'Total Entry Count' in stats and 'Total Entry Wins' in stats:
+                first_deaths = safe_int(stats.get('Total Entry Count', 0)) - safe_int(stats.get('Total Entry Wins', 0))
+            
+            # Flash Assists может быть в разных полях
+            flash_assists = safe_int(stats.get('Flash Assists', stats.get('Total Flash Successes', stats.get('flash_assists', 0))))
+            utility_damage = safe_int(stats.get('Utility Damage', stats.get('Total Utility Damage', stats.get('utility_damage', 0))))
+            
+            # Логирование для отладки
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"HLTV Rating calculation - Fields found:")
+                self.logger.debug(f"  First Kills: {first_kills} (from: {'First Kills' if 'First Kills' in stats else 'Total Entry Wins' if 'Total Entry Wins' in stats else 'fallback'})")
+                self.logger.debug(f"  First Deaths: {first_deaths} (from: {'First Deaths' if 'First Deaths' in stats else 'calculated' if 'Total Entry Count' in stats else 'fallback'})")
+                self.logger.debug(f"  Flash Assists: {flash_assists} (from: {'Flash Assists' if 'Flash Assists' in stats else 'Total Flash Successes' if 'Total Flash Successes' in stats else 'fallback'})")
+                self.logger.debug(f"  Available keys: {list(stats.keys())[:10]}...")  # Показать первые 10 ключей
             
             # Если нет критических данных, возвращаем 0
             if rounds_played == 0:
@@ -438,23 +515,29 @@ class FaceitAPIClient:
             'kast': round(safe_float(hltv_stats.get('KAST %', 0)), 1),
             'hltv_rating': self.calculate_hltv_rating(hltv_stats),
             
-            # Дополнительные метрики для HLTV 2.1
-            'first_kills': safe_int(hltv_stats.get('First Kills', 0)),
-            'first_deaths': safe_int(hltv_stats.get('First Deaths', 0)),
-            'flash_assists': safe_int(hltv_stats.get('Flash Assists', 0)),
+            # Дополнительные метрики для HLTV 2.1 - поддержка разных названий полей
+            'first_kills': safe_int(hltv_stats.get('First Kills', hltv_stats.get('Total Entry Wins', 0))),
+            'first_deaths': safe_int(hltv_stats.get('First Deaths', 
+                max(0, safe_int(hltv_stats.get('Total Entry Count', 0)) - safe_int(hltv_stats.get('Total Entry Wins', 0))))),
+            'flash_assists': safe_int(hltv_stats.get('Flash Assists', hltv_stats.get('Total Flash Successes', 0))),
             'utility_damage': safe_int(hltv_stats.get('Utility Damage', 0)),
             
-            # Метрики энтри
-            'total_entry_attempts': safe_int(hltv_stats.get('First Kills', 0)) + safe_int(hltv_stats.get('First Deaths', 0)),
-            'entry_success_percentage': round((safe_float(hltv_stats.get('First Kills', 0)) / max(safe_int(hltv_stats.get('First Kills', 0)) + safe_int(hltv_stats.get('First Deaths', 0)), 1)) * 100, 1),
+            # Метрики энтри - используем правильные поля
+            'total_entry_attempts': safe_int(hltv_stats.get('Total Entry Count', 
+                safe_int(hltv_stats.get('First Kills', hltv_stats.get('Total Entry Wins', 0))) + 
+                safe_int(hltv_stats.get('First Deaths', 0)))),
+            'entry_success_percentage': round((safe_float(hltv_stats.get('First Kills', hltv_stats.get('Total Entry Wins', 0))) / 
+                max(safe_int(hltv_stats.get('Total Entry Count', 
+                    safe_int(hltv_stats.get('First Kills', hltv_stats.get('Total Entry Wins', 0))) + 
+                    safe_int(hltv_stats.get('First Deaths', 0)))), 1)) * 100, 1),
             
             # Средние показатели за матч (новое требование)
             'avg_kills_per_match': round(safe_float(hltv_stats.get('Kills', 0)) / max(formatted['matches'], 1), 1),
             'avg_deaths_per_match': round(safe_float(hltv_stats.get('Deaths', 0)) / max(formatted['matches'], 1), 1),
             'avg_assists_per_match': round(safe_float(hltv_stats.get('Assists', 0)) / max(formatted['matches'], 1), 1),
-            'avg_first_kills_per_match': round(safe_float(hltv_stats.get('First Kills', 0)) / max(formatted['matches'], 1), 1),
-            'avg_first_deaths_per_match': round(safe_float(hltv_stats.get('First Deaths', 0)) / max(formatted['matches'], 1), 1),
-            'avg_flash_assists_per_match': round(safe_float(hltv_stats.get('Flash Assists', 0)) / max(formatted['matches'], 1), 1),
+            'avg_first_kills_per_match': round(safe_float(hltv_stats.get('First Kills', hltv_stats.get('Total Entry Wins', 0))) / max(formatted['matches'], 1), 1),
+            'avg_first_deaths_per_match': round(max(0, safe_int(hltv_stats.get('Total Entry Count', 0)) - safe_int(hltv_stats.get('Total Entry Wins', 0))) / max(formatted['matches'], 1), 1),
+            'avg_flash_assists_per_match': round(safe_float(hltv_stats.get('Flash Assists', hltv_stats.get('Total Flash Successes', 0))) / max(formatted['matches'], 1), 1),
             'avg_utility_damage_per_match': round(safe_float(hltv_stats.get('Utility Damage', 0)) / max(formatted['matches'], 1), 1),
             # Эстимация молотовов и гранат (примерно 60% гранаты, 40% молотовы от общего утилити урона)
             'avg_molotov_damage_per_match': round(safe_float(hltv_stats.get('Utility Damage', 0)) * 0.4 / max(formatted['matches'], 1), 1),
@@ -858,8 +941,14 @@ class FaceitAPIClient:
             return None
     
     async def get_player_full_profile(self, nickname: str) -> Optional[Dict[str, Any]]:
-        """Получить полный профиль игрока включая статистику и анализ производительности"""
+        """Получить полный профиль игрока включая статистику и анализ производительности с кешированием"""
         try:
+            # Проверяем кеш
+            cached_profile = await CacheService.get_player_profile(nickname)
+            if cached_profile:
+                self.logger.info(f"Returning cached profile for {nickname}")
+                return cached_profile
+            
             # Поиск игрока
             player = await self.find_player_by_nickname(nickname)
             if not player:
@@ -881,6 +970,13 @@ class FaceitAPIClient:
                 'data_quality': enhanced_stats.get('data_quality', {}) if enhanced_stats else {},
                 'last_updated': datetime.now(timezone.utc).isoformat()
             }
+            
+            # Сохраняем в кеш
+            await CacheService.set_player_profile(nickname, full_profile)
+            
+            # Также кешируем статистику отдельно для быстрого доступа
+            if enhanced_stats:
+                await CacheService.set_player_stats(player_id, enhanced_stats)
             
             return full_profile
             

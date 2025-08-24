@@ -161,7 +161,7 @@ async def show_overall_stats(callback: CallbackQuery):
 💀 **K/D/A:** {formatted_stats['kills']:,}/{formatted_stats['deaths']:,}/{formatted_stats['assists']:,}
 ⚔️ **K/D:** {formatted_stats['kd_ratio']}
 💥 **ADR:** {formatted_stats['adr']}
-🎯 **HLTV 2.1:** {formatted_stats['hltv_rating']}
+🎯 **Рейтинг игрока:** {formatted_stats['hltv_rating']}
 📍 **KAST:** {formatted_stats['kast']}%
 
 🎯 **Хедшоты:** {formatted_stats['headshots']}%
@@ -250,7 +250,7 @@ async def show_map_stats(callback: CallbackQuery):
 💀 **K/D/A:** {map_stats['kills']:,}/{map_stats['deaths']:,}/{map_stats['assists']:,}
 ⚔️ **K/D:** {map_stats['kd_ratio']}
 💥 **ADR:** {map_stats['adr']}
-🎯 **HLTV 2.1:** {map_stats['hltv_rating']}"""
+🎯 **Рейтинг:** {map_stats['hltv_rating']}"""
     
     await callback.message.edit_text(
         stats_text,
@@ -299,7 +299,7 @@ async def show_session_stats(callback: CallbackQuery):
 💀 **K/D/A:** {total_kills}/{total_deaths}/{total_assists}
 ⚔️ **K/D:** {kd_ratio}
 💥 **Средний ADR:** {avg_adr}
-🎯 **Средний HLTV:** {avg_hltv}"""
+🎯 **Средний рейтинг:** {avg_hltv}"""
     
     await callback.message.edit_text(
         stats_text,
@@ -309,49 +309,51 @@ async def show_session_stats(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "profile")
-async def show_profile(callback: CallbackQuery):
-    """Показать профиль пользователя"""
-    user_id = callback.from_user.id
-    user_data = storage.get_user(user_id)
-    
-    if not user_data:
-        await callback.message.edit_text(
-            "❌ Профиль не найден. Используйте /start для привязки профиля.",
-            reply_markup=get_back_to_main_keyboard()
-        )
-        return
-    
-    linked_date = user_data.get('linked_at', datetime.now()).strftime("%d.%m.%Y")
-    settings = storage.get_user_settings(user_id)
-    
-    profile_text = f"""👤 **Ваш профиль**
+# ОТКЛЮЧЕНО: Этот обработчик конфликтует с profile_handler.py
+# @router.callback_query(F.data == "profile")
+# async def show_profile(callback: CallbackQuery):
+#     """Показать профиль пользователя"""
+#     user_id = callback.from_user.id
+#     user_data = storage.get_user(user_id)
+#     
+#     if not user_data:
+#         await callback.message.edit_text(
+#             "❌ Профиль не найден. Используйте /start для привязки профиля.",
+#             reply_markup=get_back_to_main_keyboard()
+#         )
+#         return
+#     
+#     linked_date = user_data.get('linked_at', datetime.now()).strftime("%d.%m.%Y")
+#     settings = storage.get_user_settings(user_id)
+#     
+#     profile_text = f"""👤 **Ваш профиль**
+# 
+# 🎮 **Никнейм:** {user_data.get('nickname', 'Неизвестно')}
+# 🆔 **FACEIT ID:** {user_data.get('faceit_id', 'Неизвестно')}
+# 📅 **Привязан:** {linked_date}
+# 
+# ⚙️ **Настройки:**
+# 🔔 Уведомления: {'Включены' if settings.get('match_notifications', True) else 'Выключены'}
+# ⭐ Подписка: {settings.get('subscription_type', 'standard').title()}"""
+#     
+#     await callback.message.edit_text(
+#         profile_text,
+#         reply_markup=get_profile_keyboard(),
+#         parse_mode="Markdown"
+#     )
+#     await callback.answer()
 
-🎮 **Никнейм:** {user_data.get('nickname', 'Неизвестно')}
-🆔 **FACEIT ID:** {user_data.get('faceit_id', 'Неизвестно')}
-📅 **Привязан:** {linked_date}
 
-⚙️ **Настройки:**
-🔔 Уведомления: {'Включены' if settings.get('match_notifications', True) else 'Выключены'}
-⭐ Подписка: {settings.get('subscription_type', 'standard').title()}"""
-    
-    await callback.message.edit_text(
-        profile_text,
-        reply_markup=get_profile_keyboard(),
-        parse_mode="Markdown"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "change_profile")
-async def change_profile(callback: CallbackQuery, state: FSMContext):
-    """Смена профиля"""
-    await callback.message.edit_text(
-        "🔄 Смена профиля\n\nВведите новый никнейм FACEIT:",
-        reply_markup=get_back_to_main_keyboard()
-    )
-    await state.set_state(BotStates.waiting_for_nickname)
-    await callback.answer()
+# ОТКЛЮЧЕНО: Этот обработчик конфликтует с profile_handler.py
+# @router.callback_query(F.data == "change_profile")
+# async def change_profile(callback: CallbackQuery, state: FSMContext):
+#     """Смена профиля"""
+#     await callback.message.edit_text(
+#         "🔄 Смена профиля\n\nВведите новый никнейм FACEIT:",
+#         reply_markup=get_back_to_main_keyboard()
+#     )
+#     await state.set_state(BotStates.waiting_for_nickname)
+#     await callback.answer()
 
 
 @router.callback_query(F.data == "settings")
@@ -443,12 +445,12 @@ async def help_functions(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "help_hltv")
-async def help_hltv(callback: CallbackQuery):
-    """Объяснение HLTV рейтинга"""
-    hltv_text = """🧮 **Как считается HLTV 2.1**
+@router.callback_query(F.data == "help_rating")
+async def help_rating(callback: CallbackQuery):
+    """Объяснение рейтинга игрока"""
+    rating_text = """⭐ **Как считается рейтинг игрока**
 
-HLTV 2.1 - это комплексный рейтинг игрока, учитывающий:
+Рейтинг игрока - это комплексная оценка эффективности, учитывающая:
 
 📊 **Компоненты рейтинга:**
 • KPR (Kills per Round) - убийства за раунд
@@ -456,9 +458,6 @@ HLTV 2.1 - это комплексный рейтинг игрока, учиты
 • KAST - участие в раундах (%)
 • ADR (Average Damage per Round) - урон за раунд
 • Impact Rating - влияние на игру
-
-🔢 **Формула:**
-Rating = 0.0073×KAST + 0.3591×KPR - 0.5329×DPR + 0.2372×Impact + 0.0032×ADR + 0.1587
 
 📈 **Шкала рейтинга:**
 • 1.30+ - Исключительно

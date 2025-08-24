@@ -134,7 +134,7 @@ class BotHandlersTester:
 
 👤 **Игрок:** {nickname}
 🎮 **ELO:** {formatted_stats.get('elo', 0)} (Уровень {formatted_stats.get('level', 0)})
-⭐ **HLTV 2.1:** {hltv_rating:.2f}
+⭐ **Рейтинг игрока:** {hltv_rating:.2f}
 🌍 **Регион:** {formatted_stats.get('region', 'N/A')}
 ✅ **Верифицирован:** {'Да' if formatted_stats.get('verified', False) else 'Нет'}
 
@@ -227,7 +227,7 @@ _Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}_
                 message += f"• K/D: {kd_ratio:.3f}\n"
                 message += f"• ADR: {adr:.1f}\n"
                 message += f"• KAST: {kast:.1f}%\n"
-                message += f"• HLTV 2.1: {hltv_rating:.2f}\n\n"
+                message += f"• Рейтинг: {hltv_rating:.2f}\n\n"
             
             if len(message.split('\n')) <= 3:  # Если нет данных
                 message += "_Недостаточно данных для отображения статистики по картам._"
@@ -387,7 +387,7 @@ _Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}_
                     
                     # Проверяем наличие ключевых элементов
                     required_elements = [
-                        "Общая статистика", "Игрок:", "ELO:", "HLTV 2.1:", 
+                        "Общая статистика", "Игрок:", "ELO:", "Рейтинг игрока:", 
                         "Матчей сыграно:", "Побед:", "K/D:", "ADR:", "KAST:"
                     ]
                     
@@ -417,7 +417,7 @@ _Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}_
                     # Проверяем элементы статистики по картам
                     required_elements = [
                         "Статистика по картам", "Матчей:", "Winrate:", 
-                        "K/D:", "ADR:", "KAST:", "HLTV 2.1:"
+                        "K/D:", "ADR:", "KAST:", "Рейтинг:"
                     ]
                     
                     missing_elements = [elem for elem in required_elements if elem not in final_message]

@@ -35,18 +35,23 @@ def setup_routers():
     """Настройка роутеров - вызывается один раз"""
     try:
         # Импортируем обработчики из модулей только при настройке
-        from bot.handlers import main_router, stats_router, match_router, profile_router, settings_router, match_history_router, form_analysis_router, last_match_router, current_match_router, comparison_router, help_router
+        from bot.handlers import main_router, stats_router, match_router, profile_router, settings_router, new_match_history_router, form_analysis_router, last_match_router, current_match_router, comparison_router, help_router
         
         # Регистрируем роутеры в правильном порядке
+        # new_match_history_router должен быть ПЕРЕД main_router для приоритета reply-обработчиков
+        logger.info("📝 Registering new_match_history_router (ПЕРВЫЙ)")
+        dp.include_router(new_match_history_router)
+        logger.info("🆚 Registering comparison_router (для FSM приоритета)")
+        dp.include_router(comparison_router)
+        logger.info("🏠 Registering main_router (со catch-all)")
         dp.include_router(main_router)
+        logger.info("📊 Registering stats_router")
         dp.include_router(stats_router)
         dp.include_router(match_router)
         dp.include_router(profile_router)
-        dp.include_router(match_history_router)
         dp.include_router(form_analysis_router)
         dp.include_router(last_match_router)
         dp.include_router(current_match_router)
-        dp.include_router(comparison_router)
         dp.include_router(help_router)
         dp.include_router(settings_router)
         
@@ -99,7 +104,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="FACEIT CS2 Bot API",
     description="API для получения статистики игроков CS2 с FACEIT",
-    version="1.1.0",
+    version="2.1.1",
     lifespan=lifespan
 )
 
@@ -109,7 +114,7 @@ async def root():
     """Главная страница API"""
     return {
         "message": "FACEIT CS2 Bot API",
-        "version": "1.1.0",
+        "version": "2.1.1",
         "status": "active",
         "endpoints": {
             "health": "/health",
@@ -230,7 +235,7 @@ async def get_bot_stats():
     return {
         **db_stats,
         "uptime": await storage.get_current_time(),
-        "version": "1.2.0"
+        "version": "2.1.0"
     }
 
 @app.post("/webhook/faceit")
@@ -734,7 +739,7 @@ if __name__ == "__main__":
         uvicorn.run(
             "main:app",
             host="0.0.0.0",
-            port=8001,
+            port=8000,
             reload=settings.debug,
             log_level="info"
         )

@@ -9,17 +9,37 @@ logger = logging.getLogger(__name__)
 storage = DatabaseStorage()
 
 async def init_storage():
-    """Инициализация подключения к базам данных"""
+    """Инициализация подключения к базам данных с retry логикой"""
+    
     try:
         # Проверяем наличие URL для подключения
         if not settings.database_url or not settings.redis_url:
             logger.error("❌ Database URLs not configured in .env file")
             raise ValueError("Database URLs not configured")
         
-        # Подключаемся к базам данных
-        await storage.connect(settings.database_url, settings.redis_url)
+        # Retry логика для подключения к БД
+        max_retries = 5
+        retry_delay = 5  # секунд
         
-        logger.info("✅ Storage initialized successfully")
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"🔄 Попытка подключения к БД {attempt}/{max_retries}")
+                
+                # Подключаемся к базам данных
+                await storage.connect(settings.database_url, settings.redis_url)
+                
+                logger.info("✅ Storage initialized successfully")
+                return
+                
+            except Exception as conn_error:
+                logger.warning(f"❌ Ошибка подключения (попытка {attempt}/{max_retries}): {conn_error}")
+                
+                if attempt < max_retries:
+                    logger.info(f"⏳ Ожидание {retry_delay} секунд перед повтором...")
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.error("❌ Не удалось подключиться к БД после всех попыток")
+                    raise conn_error
         
     except Exception as e:
         logger.error(f"❌ Failed to initialize storage: {e}")

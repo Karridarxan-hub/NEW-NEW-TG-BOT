@@ -85,38 +85,108 @@ async def _format_match_message(match_data: Dict, match_stats: Dict, user_faceit
         
         # Определяем команды и счет
         teams = match_data.get('teams', {})
-        team1_name = teams.get('faction1', {}).get('name', 'Team 1')
-        team2_name = teams.get('faction2', {}).get('name', 'Team 2')
+        team1_name = teams.get('faction1', {}).get('name', 'Неизвестная команда')
+        team2_name = teams.get('faction2', {}).get('name', 'Неизвестная команда')
         
-        team1_score = match_result.get('score', {}).get('faction1', 0)
-        team2_score = match_result.get('score', {}).get('faction2', 0)
+        # Попробуем получить имена команд из match_stats если они не найдены
+        if team1_name == 'Неизвестная команда' or team2_name == 'Неизвестная команда':
+            try:
+                rounds = match_stats.get('rounds', [])
+                if rounds:
+                    teams_data = rounds[0].get('teams', [])
+                    if len(teams_data) >= 2:
+                        team1_stats_name = teams_data[0].get('team_stats', {}).get('Team', '')
+                        team2_stats_name = teams_data[1].get('team_stats', {}).get('Team', '')
+                        if team1_stats_name and team1_name == 'Неизвестная команда':
+                            team1_name = team1_stats_name
+                        if team2_stats_name and team2_name == 'Неизвестная команда':
+                            team2_name = team2_stats_name
+            except Exception as e:
+                logger.error(f"Error getting team names from match_stats: {e}")
+        
+        # Получаем правильный счёт раундов из match_stats
+        team1_score, team2_score = _get_round_scores(match_stats)
+        if team1_score is None or team2_score is None:
+            # Fallback к счёту матчей если нет данных о раундах
+            team1_score = match_result.get('score', {}).get('faction1', 0)
+            team2_score = match_result.get('score', {}).get('faction2', 0)
         
         # Определяем статус для пользователя (победа/поражение)
-        user_team = _get_user_team(match_stats, user_faceit_id)
-        if user_team and winner:
-            if (user_team == 'faction1' and winner == 'faction1') or \
-               (user_team == 'faction2' and winner == 'faction2'):
-                status_emoji = "🏆"
+        user_team_index = _get_user_team(match_stats, user_faceit_id)
+        status_emoji = "🎮"  # По умолчанию
+        
+        logger.error(f"VERSION 2.1: user_team_index={user_team_index}, team1_score={team1_score}, team2_score={team2_score}")
+        logger.error(f"VERSION 2.1: team1_name={team1_name}, team2_name={team2_name}")
+        
+        # Определяем по счету
+        if user_team_index is not None and team1_score is not None and team2_score is not None:
+            if user_team_index == 0:
+                # Игрок в первой команде
+                status_emoji = "🏆" if team1_score > team2_score else "❌"
+                user_team = 'faction1'
+                logger.error(f"VERSION 2.1: Игрок в команде 1, статус: {status_emoji}")
+            elif user_team_index == 1:
+                # Игрок во второй команде
+                status_emoji = "🏆" if team2_score > team1_score else "❌"
+                user_team = 'faction2'
+                logger.error(f"VERSION 2.1: Игрок в команде 2, статус: {status_emoji}")
             else:
-                status_emoji = "💔"
+                user_team = None
         else:
-            status_emoji = "🎮"
+            user_team = None
+            logger.error(f"VERSION 2.1: Не удалось определить команду игрока")
 
-        # Карта
-        voting = match_data.get('voting', {})
+        # Карта - попробуем получить из разных источников
         map_name = "Неизвестная карта"
+        
+        # Сначала из voting
+        voting = match_data.get('voting', {})
         if voting and 'map' in voting:
-            if 'pick' in voting['map']:
-                map_name = voting['map']['pick'][0] if voting['map']['pick'] else "Неизвестная карта"
-            elif 'name' in voting['map']:
+            if 'pick' in voting['map'] and voting['map']['pick']:
+                map_name = voting['map']['pick'][0]
+            elif 'name' in voting['map'] and voting['map']['name']:
                 map_name = voting['map']['name']
+        
+        # Если не нашли, попробуем из match_stats
+        if map_name == "Неизвестная карта":
+            try:
+                rounds = match_stats.get('rounds', [])
+                if rounds:
+                    round_stats = rounds[0].get('round_stats', {})
+                    if 'Map' in round_stats and round_stats['Map']:
+                        map_name = round_stats['Map']
+                        # Добавляем префикс de_ если его нет
+                        if not map_name.startswith('de_') and map_name.lower() != 'unknown':
+                            map_name = f"de_{map_name.lower()}"
+            except Exception as e:
+                logger.error(f"Error getting map name from match_stats: {e}")
 
         # Статистика пользователя
         user_stats = _get_user_stats(match_stats, user_faceit_id)
         
+        # Определяем какая команда игрока и показываем её первой
+        if user_team_index == 0:
+            # Команда игрока - первая
+            user_team_name = team1_name
+            user_team_score = team1_score
+            enemy_team_name = team2_name
+            enemy_team_score = team2_score
+        elif user_team_index == 1:
+            # Команда игрока - вторая
+            user_team_name = team2_name
+            user_team_score = team2_score
+            enemy_team_name = team1_name
+            enemy_team_score = team1_score
+        else:
+            # Не удалось определить - показываем как есть
+            user_team_name = team1_name
+            user_team_score = team1_score
+            enemy_team_name = team2_name
+            enemy_team_score = team2_score
+        
         # Формируем первые строки сообщения
         message_lines = [
-            f"{status_emoji} <b>{team1_name} {team1_score} - {team2_score} {team2_name}</b>",
+            f"{status_emoji} <b>{user_team_name}</b> {user_team_score} - {enemy_team_score} {enemy_team_name}",
             f"🗺️ <b>Карта:</b> {map_name}",
             "",
             f"📊 <b>Ваша статистика:</b>",
@@ -127,12 +197,49 @@ async def _format_match_message(match_data: Dict, match_stats: Dict, user_faceit
             deaths = user_stats.get('Deaths', '0')
             assists = user_stats.get('Assists', '0')
             kd_ratio = user_stats.get('K/D Ratio', '0.00')
-            adr = user_stats.get('ADR', '0')
-            hltv_rating = faceit_client.calculate_hltv_rating(user_stats)
+            kr_ratio = user_stats.get('K/R Ratio', '0.00')
+            headshots = user_stats.get('Headshots', '0')
             
+            # Рассчитываем процент хедшотов
+            try:
+                kills_int = int(kills)
+                hs_int = int(headshots)
+                if kills_int > 0:
+                    hs_percent = round((hs_int / kills_int) * 100, 1)
+                    logger.error(f"VERSION 2.1: HS% рассчитан: {hs_int}/{kills_int} = {hs_percent}%")
+                else:
+                    hs_percent = 0
+            except Exception as e:
+                logger.error(f"VERSION 2.1: Ошибка расчета HS%: {e}")
+                hs_percent = user_stats.get('HS %', '0')
+                
+            mvps = user_stats.get('MVPs', '0')
+            triple_kills = user_stats.get('Triple Kills', '0')
+            quadro_kills = user_stats.get('Quadro Kills', '0')
+            penta_kills = user_stats.get('Penta Kills', '0')
+            adr = user_stats.get('ADR', '0')
+            
+            # Основная статистика
             message_lines.append(
-                f"🔥 K-D-A: {kills}-{deaths}-{assists} | K/D: {kd_ratio} | ADR: {adr} | HLTV 2.1: {hltv_rating:.2f}"
+                f"🔥 <b>K-D-A:</b> {kills}-{deaths}-{assists} | <b>K/D:</b> {kd_ratio} | <b>ADR:</b> {adr}"
             )
+            
+            # Дополнительная статистика
+            message_lines.append(
+                f"🎯 <b>Хедшоты:</b> {headshots} ({hs_percent}%) | <b>K/R:</b> {kr_ratio} | <b>MVP:</b> {mvps}"
+            )
+            
+            # Мультикиллы (показываем только если есть)
+            multikills = []
+            if int(triple_kills) > 0:
+                multikills.append(f"3K: {triple_kills}")
+            if int(quadro_kills) > 0:
+                multikills.append(f"4K: {quadro_kills}")  
+            if int(penta_kills) > 0:
+                multikills.append(f"5K: {penta_kills}")
+                
+            if multikills:
+                message_lines.append(f"⚡ <b>Мультикиллы:</b> {' | '.join(multikills)}")
         else:
             message_lines.append("❌ Статистика недоступна")
 
@@ -152,6 +259,7 @@ async def _format_match_message(match_data: Dict, match_stats: Dict, user_faceit
 def _get_user_team(match_stats: Dict, user_faceit_id: str) -> Optional[str]:
     """Определяет в какой команде играл пользователь"""
     try:
+        logger.error(f"VERSION 2.1: Ищем игрока {user_faceit_id}")
         rounds = match_stats.get('rounds', [])
         if not rounds:
             return None
@@ -159,12 +267,22 @@ def _get_user_team(match_stats: Dict, user_faceit_id: str) -> Optional[str]:
         round_stats = rounds[0]  # Берем первый раунд
         teams = round_stats.get('teams', [])
         
-        for team in teams:
+        for i, team in enumerate(teams):
+            team_name = team.get('team_stats', {}).get('Team', 'Unknown')
             players = team.get('players', [])
+            logger.error(f"VERSION 2.1: Проверяем команду {i} ({team_name}) с {len(players)} игроками")
+            
             for player in players:
-                if player.get('player_id') == user_faceit_id:
-                    return team.get('team_id')
+                player_id = player.get('player_id')
+                player_nick = player.get('nickname', 'Unknown')
+                logger.error(f"VERSION 2.1: Проверяем игрока {player_nick} (ID: {player_id})")
+                
+                if player_id == user_faceit_id:
+                    logger.error(f"VERSION 2.1: НАШЛИ игрока {player_nick} в команде {team_name} (индекс {i})")
+                    # Возвращаем индекс команды (0 или 1) вместо team_id
+                    return i
         
+        logger.error(f"VERSION 2.1: Игрок {user_faceit_id} НЕ НАЙДЕН ни в одной команде")
         return None
     except Exception as e:
         logger.error(f"Error getting user team: {e}")
@@ -225,14 +343,11 @@ def _format_teams_info(match_stats: Dict, user_faceit_id: str) -> List[str]:
                 deaths = stats.get('Deaths', '0')
                 assists = stats.get('Assists', '0')
                 adr = stats.get('ADR', '0')
-                kast = stats.get('KAST', '0')
-                hltv_rating = faceit_client.calculate_hltv_rating(stats)
-                
                 # Выделяем пользователя жирным текстом
                 if player_id == user_faceit_id:
-                    player_line = f"<b>• {nickname}</b> ({kills}-{deaths}-{assists}, ADR: {adr}, KAST: {kast}%, HLTV 2.1: {hltv_rating:.2f})"
+                    player_line = f"<b>• {nickname}</b> ({kills}-{deaths}-{assists}, ADR: {adr})"
                 else:
-                    player_line = f"• {nickname} ({kills}-{deaths}-{assists}, ADR: {adr}, KAST: {kast}%, HLTV 2.1: {hltv_rating:.2f})"
+                    player_line = f"• {nickname} ({kills}-{deaths}-{assists}, ADR: {adr})"
                 
                 lines.append(player_line)
             
@@ -255,17 +370,48 @@ def _create_match_keyboard(match_data: Dict) -> InlineKeyboardMarkup:
         faceit_url = f"https://www.faceit.com/en/cs2/room/{match_id}"
         builder.button(text="🔗 Смотреть матч на FACEIT", url=faceit_url)
     
-    # Кнопка назад в главное меню
-    builder.button(text="◀️ Назад в главное меню", callback_data="back_to_main")
-    
-    builder.adjust(1, 1)  # Каждая кнопка на отдельной строке
+    builder.adjust(1)  # Каждая кнопка на отдельной строке
     return builder.as_markup()
 
 
 def _get_back_keyboard() -> InlineKeyboardMarkup:
-    """Простая клавиатура с кнопкой возврата"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад в главное меню", callback_data="back_to_main")]
-        ]
-    )
+    """Простая клавиатура без кнопок навигации"""
+    return None
+
+
+def _get_round_scores(match_stats: Dict) -> tuple:
+    """Получает счёт раундов из статистики матча"""
+    try:
+        rounds = match_stats.get('rounds', [])
+        if not rounds:
+            return None, None
+            
+        round_stats = rounds[0]
+        teams = round_stats.get('teams', [])
+        
+        if len(teams) >= 2:
+            team1_score = teams[0].get('team_stats', {}).get('Final Score', 0)
+            team2_score = teams[1].get('team_stats', {}).get('Final Score', 0)
+            
+            # Проверяем что счёт валидный
+            if isinstance(team1_score, (int, str)) and isinstance(team2_score, (int, str)):
+                try:
+                    return int(team1_score), int(team2_score)
+                except ValueError:
+                    pass
+        
+        return None, None
+    except Exception as e:
+        logger.error(f"Error getting round scores: {e}")
+        return None, None
+
+
+def _get_team_display_order(user_team, team1_name, team2_name, team1_score, team2_score):
+    """Определяет порядок отображения команд - команда игрока первой"""
+    if user_team == 'faction1':
+        return team1_name, team1_score, team2_name, team2_score
+    elif user_team == 'faction2':
+        return team2_name, team2_score, team1_name, team1_score
+    else:
+        # Если не удалось определить команду игрока
+        return team1_name, team1_score, team2_name, team2_score

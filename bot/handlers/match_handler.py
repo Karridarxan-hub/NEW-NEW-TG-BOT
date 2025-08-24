@@ -5,7 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime
 import re
 
-from keyboards import get_match_history_keyboard, get_main_menu_keyboard
+from keyboards import get_main_menu_keyboard
 from storage import storage
 from faceit_client import faceit_client
 
@@ -17,59 +17,7 @@ class MatchStates(StatesGroup):
     waiting_for_custom_count = State()
     waiting_for_match_url = State()
 
-# Меню истории матчей
-@router.callback_query(F.data == "match_history")
-async def show_match_history_menu(callback: CallbackQuery):
-    """Показать меню истории матчей"""
-    await callback.message.edit_text(
-        "📝 Выберите количество матчей для просмотра:",
-        reply_markup=get_match_history_keyboard()
-    )
-    await callback.answer()
-
-# Показать последние N матчей
-@router.callback_query(F.data.startswith("history_"))
-async def show_match_history(callback: CallbackQuery, state: FSMContext):
-    """Показать историю матчей"""
-    data = callback.data.split("_")
-    
-    if len(data) != 2:
-        await callback.answer("❌ Ошибка обработки запроса", show_alert=True)
-        return
-    
-    if data[1] == "custom":
-        # Запрашиваем пользовательское количество
-        await callback.message.edit_text(
-            "✏️ Введите количество матчей для просмотра (1-100):"
-        )
-        await state.set_state(MatchStates.waiting_for_custom_count)
-        await callback.answer()
-        return
-    
-    try:
-        count = int(data[1])
-    except ValueError:
-        await callback.answer("❌ Неверное количество матчей", show_alert=True)
-        return
-    
-    await show_matches_list(callback.message, callback.from_user.id, count)
-    await callback.answer()
-
-# Обработка пользовательского количества матчей
-@router.message(MatchStates.waiting_for_custom_count)
-async def process_custom_count(message: Message, state: FSMContext):
-    """Обработка пользовательского количества матчей"""
-    try:
-        count = int(message.text.strip())
-        if count < 1 or count > 100:
-            await message.answer("❌ Количество должно быть от 1 до 100")
-            return
-    except ValueError:
-        await message.answer("❌ Введите число от 1 до 100")
-        return
-    
-    await state.clear()
-    await show_matches_list(message, message.from_user.id, count)
+# История матчей удалена - будет в новом обработчике
 
 # Показать последний матч
 @router.callback_query(F.data == "last_match")
@@ -198,74 +146,7 @@ async def analyze_match_url(message: Message, state: FSMContext):
         disable_web_page_preview=True
     )
 
-# Вспомогательные функции
-async def show_matches_list(message, user_id: int, count: int):
-    """Показать список матчей"""
-    faceit_id = await storage.get_user_faceit_id(user_id)
-    
-    if not faceit_id:
-        await message.answer("❌ Профиль не привязан!")
-        return
-    
-    # Получаем матчи
-    matches = await faceit_client.get_player_matches(faceit_id, limit=count)
-    
-    if not matches or not matches.get('items'):
-        await message.edit_text(
-            "📝 История матчей пуста",
-            reply_markup=get_main_menu_keyboard()
-        )
-        return
-    
-    # Формируем сообщение
-    text = f"📝 **История последних {count} матчей:**\n\n"
-    
-    for i, match in enumerate(matches['items'][:count], 1):
-        # Определяем результат
-        teams = match.get('teams', {})
-        results = match.get('results', {})
-        winner = results.get('winner')
-        
-        # Находим команду игрока
-        player_team = None
-        for team_id, team_data in teams.items():
-            if any(p['player_id'] == faceit_id for p in team_data.get('players', [])):
-                player_team = team_id
-                break
-        
-        # Определяем исход
-        if player_team == winner:
-            result_emoji = "✅"
-        else:
-            result_emoji = "❌"
-        
-        # Получаем счет
-        score = results.get('score', {})
-        faction1_score = score.get('faction1', 0)
-        faction2_score = score.get('faction2', 0)
-        
-        # Получаем карту
-        voting = match.get('voting', {})
-        map_pick = voting.get('map', {}).get('pick', ['Unknown'])[0]
-        
-        # Время матча
-        finished_at = match.get('finished_at', 0) / 1000
-        time_str = datetime.fromtimestamp(finished_at).strftime('%d.%m %H:%M')
-        
-        text += f"{i}. {result_emoji} **{faction1_score}:{faction2_score}** "
-        text += f"на {map_pick} | {time_str}\n"
-    
-    # Добавляем ссылку на FACEIT
-    user_data = await storage.get_user(user_id)
-    nickname = user_data.get('nickname', '')
-    text += f"\n[Все матчи на FACEIT](https://www.faceit.com/en/players/{nickname}/stats/cs2)"
-    
-    await message.edit_text(
-        text,
-        parse_mode="Markdown",
-        reply_markup=get_match_history_keyboard(),
-        disable_web_page_preview=True
-    )
+# Вспомогательные функции для матчей (кроме истории)
 
 def format_match_details(match, match_stats, player_id):
     """Форматировать детальную информацию о матче"""

@@ -157,10 +157,43 @@ data/
 # Git
 .git/
 .gitignore
+.gitattributes
+CLAUDE.md
+README.md
 
-# Documentation build
-docs/build/
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
 
-# Temporary files
+# Development tools
+.pre-commit-config.yaml
+.github/
+
+# Test files (exclude from production)
+test_*.py
+*_test.py
+tests/
+test/
+debug_*.py
+
+# Documentation
+docs/
+*.md
+!requirements.txt
+
+# Temporary and cache files
 *.tmp
 *.temp
+*.log
+*.backup
+*.orig
+
+# Node modules (if any)
+node_modules/
+package*.json
+
+# Development databases
+*.db
+*.sqlite
+*.sqlite3

@@ -32,7 +32,7 @@ async def get_comparison_keyboard(user_data: Dict[str, Any]) -> InlineKeyboardMa
     Returns:
         InlineKeyboardMarkup: Клавиатура меню сравнения
     """
-    comparison_players = user_data.get('comparison_players', [])
+    comparison_players = user_data.get('comparison_players', []) if isinstance(user_data, dict) else []
     players_count = len(comparison_players)
     
     keyboard = []
@@ -63,11 +63,6 @@ async def get_comparison_keyboard(user_data: Dict[str, Any]) -> InlineKeyboardMa
             callback_data="comparison_clear"
         )])
     
-    # Кнопка назад
-    keyboard.append([InlineKeyboardButton(
-        text="⬅️ Назад",
-        callback_data="main_menu"
-    )])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -82,7 +77,7 @@ async def format_comparison_menu_text(user_data: Dict[str, Any]) -> str:
     Returns:
         str: Форматированный текст меню
     """
-    comparison_players = user_data.get('comparison_players', [])
+    comparison_players = user_data.get('comparison_players', []) if isinstance(user_data, dict) else []
     
     text = "🆚 <b>Сравнение игроков</b>\n\n"
     
@@ -93,13 +88,34 @@ async def format_comparison_menu_text(user_data: Dict[str, Any]) -> str:
         text += f"📋 Выбрано игроков: {len(comparison_players)}/2\n\n"
         
         for i, player in enumerate(comparison_players, 1):
-            text += f"{i}. <b>{player['nickname']}</b>\n"
-            text += f"   🎯 Уровень: {player.get('skill_level', 'N/A')}\n"
-            text += f"   🏆 ELO: {player.get('faceit_elo', 'N/A')}\n\n"
+            # Извлекаем данные с учетом возможных мест их расположения
+            nickname = player.get('nickname', 'Unknown')
+            skill_level = player.get('skill_level', 0)
+            faceit_elo = player.get('faceit_elo', 0)
+            
+            # Если данные все еще нулевые, пробуем получить из profile_data
+            # profile_data теперь содержит статистику напрямую, а не вложенный объект
+            if skill_level == 0 and 'profile_data' in player:
+                profile_stats = player['profile_data']
+                skill_level = profile_stats.get('level', skill_level)
+                faceit_elo = profile_stats.get('elo', faceit_elo)
+            
+            # Добавляем дополнительную статистику если доступна
+            text += f"{i}. <b>{nickname}</b>\n"
+            text += f"   🎯 Уровень: {skill_level if skill_level else 'N/A'}\n"
+            text += f"   🏆 ELO: {faceit_elo if faceit_elo else 'N/A'}\n"
+            
+            # Если есть дополнительная статистика, показываем её
+            if 'profile_data' in player:
+                # profile_data теперь содержит статистику напрямую
+                stats = player['profile_data']
+                print(f"[MENU DEBUG] Player {nickname}: matches = {stats.get('matches')}, type = {type(stats.get('matches'))}")
+                if stats.get('matches'):
+                    text += f"   🎮 Матчей: {stats.get('matches', 0)}\n"
+            
+            text += "\n"
         
-        if len(comparison_players) == 2:
-            text += "✅ Готово к сравнению!"
-        else:
+        if len(comparison_players) < 2:
             text += f"⏳ Нужно еще {2 - len(comparison_players)} игрок(ов)"
     
     return text
@@ -139,7 +155,7 @@ async def get_player_comparison_stats(player_data: Dict[str, Any]) -> Dict[str, 
     stats['adr'] = float(lifetime.get('ADR', 0))
     stats['flash_assists'] = float(lifetime.get('Flash Assists', 0))
     stats['kast'] = float(lifetime.get('KAST', 0))
-    stats['hltv_rating'] = float(lifetime.get('HLTV Rating 2.1', 0))
+    stats['hltv_rating'] = float(lifetime.get('Player Rating', 0))
     
     # Статистика первых убийств/смертей
     stats['first_kills'] = float(lifetime.get('First Kills', 0))
@@ -192,15 +208,7 @@ def format_comparison_table(player1_stats: Dict[str, Any], player2_stats: Dict[s
     
     # Продвинутые показатели
     text += "📈 <b>Продвинутые показатели:</b>\n"
-    text += f"ADR: <b>{player1_stats['adr']:.1f}</b> | <b>{player2_stats['adr']:.1f}</b>\n"
-    text += f"Flash Assists: <b>{player1_stats['flash_assists']:.1f}</b> | <b>{player2_stats['flash_assists']:.1f}</b>\n"
-    text += f"KAST: <b>{player1_stats['kast']:.1f}%</b> | <b>{player2_stats['kast']:.1f}%</b>\n"
-    text += f"HLTV 2.1: <b>{player1_stats['hltv_rating']:.2f}</b> | <b>{player2_stats['hltv_rating']:.2f}</b>\n\n"
-    
-    # Статистика Entry
-    text += "⚡ <b>Entry статистика:</b>\n"
-    text += f"Первые килы: <b>{player1_stats['first_kills']:.1f}</b> | <b>{player2_stats['first_kills']:.1f}</b>\n"
-    text += f"Первые смерти: <b>{player1_stats['first_deaths']:.1f}</b> | <b>{player2_stats['first_deaths']:.1f}</b>\n\n"
+    text += f"ADR: <b>{player1_stats['adr']:.1f}</b> | <b>{player2_stats['adr']:.1f}</b>\n\n"
     
     # Статистика утилит
     text += "💥 <b>Статистика утилит:</b>\n"
@@ -260,16 +268,17 @@ async def handle_add_self_to_comparison(callback: CallbackQuery, state: FSMConte
     """Добавляет текущего пользователя в список для сравнения."""
     try:
         user_id = str(callback.from_user.id)
-        user_data = await state.get_data()
+        state_data = await state.get_data()
         
         # Получаем никнейм пользователя из storage
-        user_nickname = await storage.get(f"user:{user_id}:nickname")
+        user_data = await storage.get_user(int(user_id))
+        user_nickname = user_data.get('nickname') if user_data else None
         
         if not user_nickname:
             await callback.answer("❌ Сначала привяжите свой FACEIT аккаунт в настройках!")
             return
         
-        comparison_players = user_data.get('comparison_players', [])
+        comparison_players = state_data.get('comparison_players', []) if isinstance(state_data, dict) else []
         
         # Проверяем, есть ли уже этот игрок в списке
         if any(player['nickname'] == user_nickname for player in comparison_players):
@@ -289,19 +298,31 @@ async def handle_add_self_to_comparison(callback: CallbackQuery, state: FSMConte
             await callback.answer("❌ Не удалось загрузить ваш профиль FACEIT!")
             return
         
-        # Добавляем игрока в список
+        # Добавляем игрока в список с полной статистикой
+        # Извлекаем данные из правильной структуры
+        player_stats = player_profile.get('stats', {})
+        
+        # Debug логирование (принудительный вывод)
+        print(f"[SELF DEBUG] Adding player: {user_nickname}")
+        print(f"[SELF DEBUG] Profile keys: {list(player_profile.keys())}")
+        print(f"[SELF DEBUG] Stats keys: {list(player_stats.keys()) if player_stats else 'No stats'}")
+        print(f"[SELF DEBUG] Stats: nickname={player_stats.get('nickname')}, level={player_stats.get('level')}, elo={player_stats.get('elo')}, matches={player_stats.get('matches')}")
+        print(f"[SELF DEBUG] First 500 chars of stats: {str(player_stats)[:500] if player_stats else 'No stats'}")
+        
+        # Сохраняем полную статистику для сравнения
         comparison_players.append({
-            'nickname': user_nickname,
-            'skill_level': player_profile.get('skill_level', 0),
-            'faceit_elo': player_profile.get('faceit_elo', 0),
-            'profile_data': player_profile
+            'nickname': player_stats.get('nickname', user_nickname),
+            'skill_level': player_stats.get('level', 0),
+            'faceit_elo': player_stats.get('elo', 0),
+            'profile_data': player_stats  # Сохраняем полную статистику, а не весь профиль
         })
         
         await state.update_data(comparison_players=comparison_players)
         
         # Обновляем меню
-        text = await format_comparison_menu_text(await state.get_data())
-        keyboard = await get_comparison_keyboard(await state.get_data())
+        updated_data = await state.get_data()  # Получаем обновленные данные
+        text = await format_comparison_menu_text(updated_data)
+        keyboard = await get_comparison_keyboard(updated_data)
         
         await callback.message.edit_text(
             text=text,
@@ -312,7 +333,7 @@ async def handle_add_self_to_comparison(callback: CallbackQuery, state: FSMConte
         
     except Exception as e:
         await callback.answer("Произошла ошибка при добавлении в сравнение")
-        print(f"Error adding self to comparison: {e}")
+        logger.error(f"Error adding self to comparison: {e}")
 
 
 @router.callback_query(F.data == "comparison_add_player")
@@ -320,7 +341,7 @@ async def handle_add_player_to_comparison(callback: CallbackQuery, state: FSMCon
     """Запускает FSM для добавления нового игрока в сравнение."""
     try:
         user_data = await state.get_data()
-        comparison_players = user_data.get('comparison_players', [])
+        comparison_players = user_data.get('comparison_players', []) if isinstance(user_data, dict) else []
         
         # Проверяем лимит игроков
         if len(comparison_players) >= 2:
@@ -329,21 +350,17 @@ async def handle_add_player_to_comparison(callback: CallbackQuery, state: FSMCon
         
         await state.set_state(ComparisonStates.waiting_for_nickname)
         
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="❌ Отмена", callback_data="comparison")
-        ]])
-        
         await callback.message.edit_text(
             text="🔍 <b>Добавление игрока в сравнение</b>\n\n"
                  "Введите никнейм игрока FACEIT, которого хотите добавить для сравнения:",
-            reply_markup=keyboard,
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=None  # Убираем любые inline кнопки
         )
         await callback.answer()
         
     except Exception as e:
         await callback.answer("Произошла ошибка")
-        print(f"Error in add player handler: {e}")
+        logger.error(f"Error in add player handler: {e}")
 
 
 @router.message(ComparisonStates.waiting_for_nickname)
@@ -356,13 +373,19 @@ async def handle_player_nickname_input(message: Message, state: FSMContext):
         if not nickname:
             await message.answer("❌ Пожалуйста, введите корректный никнейм!")
             return
+            
+        # Проверяем на эмодзи и специальные символы
+        import re
+        if re.search(r'[\U0001F300-\U0001F9FF]|[☀-⛿]|❌|✅|�[�-�]', nickname):
+            await message.answer("❌ Никнейм не может содержать эмодзи! Введите никнейм FACEIT.")
+            return
         
         if len(nickname) < 3 or len(nickname) > 20:
             await message.answer("❌ Никнейм должен содержать от 3 до 20 символов!")
             return
         
         user_data = await state.get_data()
-        comparison_players = user_data.get('comparison_players', [])
+        comparison_players = user_data.get('comparison_players', []) if isinstance(user_data, dict) else []
         
         # Проверяем, есть ли уже этот игрок в списке
         if any(player['nickname'].lower() == nickname.lower() for player in comparison_players):
@@ -379,25 +402,54 @@ async def handle_player_nickname_input(message: Message, state: FSMContext):
             await loading_msg.edit_text("❌ Игрок с таким никнеймом не найден в FACEIT!")
             return
         
-        # Добавляем игрока в список
+        # Добавляем игрока в список с полной статистикой
+        # Извлекаем данные из правильной структуры
+        player_stats = player_profile.get('stats', {})
+        
+        # Debug логирование (принудительный вывод)
+        print(f"[MANUAL DEBUG] Adding player by nickname: {nickname}")
+        print(f"[MANUAL DEBUG] Profile keys: {list(player_profile.keys())}")
+        print(f"[MANUAL DEBUG] Stats keys: {list(player_stats.keys()) if player_stats else 'No stats'}")
+        print(f"[MANUAL DEBUG] Stats: nickname={player_stats.get('nickname')}, level={player_stats.get('level')}, elo={player_stats.get('elo')}, matches={player_stats.get('matches')}")
+        print(f"[MANUAL DEBUG] First 500 chars of stats: {str(player_stats)[:500] if player_stats else 'No stats'}")
+        
+        # Сохраняем полную статистику для сравнения
         comparison_players.append({
-            'nickname': player_profile.get('nickname', nickname),
-            'skill_level': player_profile.get('skill_level', 0),
-            'faceit_elo': player_profile.get('faceit_elo', 0),
-            'profile_data': player_profile
+            'nickname': player_stats.get('nickname', nickname),
+            'skill_level': player_stats.get('level', 0),
+            'faceit_elo': player_stats.get('elo', 0),
+            'profile_data': player_stats  # Сохраняем полную статистику, а не весь профиль
         })
         
         await state.update_data(comparison_players=comparison_players)
-        await state.clear()
         
-        # Возвращаемся в меню сравнения
-        text = await format_comparison_menu_text(await state.get_data())
-        keyboard = await get_comparison_keyboard(await state.get_data())
+        # Возвращаемся в меню сравнения с reply-клавиатурой
+        from bot.handlers.main_handler import get_comparison_keyboard_with_count
+        updated_data = await state.get_data()
+        text = await format_comparison_menu_text(updated_data)
         
+        # Показываем обновленное меню без лишних сообщений
         await loading_msg.edit_text(
             text=text,
-            reply_markup=keyboard,
             parse_mode="HTML"
+        )
+        
+        # Очищаем только текущее FSM состояние, но сохраняем данные игроков
+        await state.set_state(None)
+        
+        # Определяем сообщение на основе количества игроков
+        players_count = len(updated_data.get('comparison_players', []))
+        if players_count == 1:
+            success_message = "✅ Первый игрок добавлен"
+        elif players_count == 2:
+            success_message = "✅ Готово к сравнению!"
+        else:
+            success_message = "✅ Игрок добавлен"
+        
+        # Отправляем обновленную reply-клавиатуру с подходящим сообщением
+        await message.answer(
+            success_message,
+            reply_markup=get_comparison_keyboard_with_count(updated_data)
         )
         
         await message.delete()
@@ -412,7 +464,7 @@ async def handle_compare_players(callback: CallbackQuery, state: FSMContext):
     """Выполняет сравнение двух выбранных игроков."""
     try:
         user_data = await state.get_data()
-        comparison_players = user_data.get('comparison_players', [])
+        comparison_players = user_data.get('comparison_players', []) if isinstance(user_data, dict) else []
         
         if len(comparison_players) != 2:
             await callback.answer("⚠️ Для сравнения нужно выбрать ровно 2 игроков!")
@@ -429,8 +481,7 @@ async def handle_compare_players(callback: CallbackQuery, state: FSMContext):
         
         # Создаем клавиатуру
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Новое сравнение", callback_data="comparison_clear")],
-            [InlineKeyboardButton(text="⬅️ Назад к меню", callback_data="comparison")]
+            [InlineKeyboardButton(text="🔄 Новое сравнение", callback_data="comparison_clear")]
         ])
         
         await callback.message.edit_text(
@@ -451,8 +502,9 @@ async def handle_clear_comparison(callback: CallbackQuery, state: FSMContext):
     try:
         await state.update_data(comparison_players=[])
         
-        text = await format_comparison_menu_text(await state.get_data())
-        keyboard = await get_comparison_keyboard(await state.get_data())
+        updated_data = await state.get_data()
+        text = await format_comparison_menu_text(updated_data)
+        keyboard = await get_comparison_keyboard(updated_data)
         
         await callback.message.edit_text(
             text=text,

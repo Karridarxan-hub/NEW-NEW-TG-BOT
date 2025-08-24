@@ -88,8 +88,11 @@ async def show_profile(callback: CallbackQuery):
         profile_text = f"""
 👤 **Ваш профиль**
 
-🎮 **FACEIT данные:**
+🎮 **Привязанный аккаунт:**
 • Никнейм: {nickname}
+• Профиль FACEIT: [Открыть профиль](https://www.faceit.com/en/players/{nickname})
+
+📊 **Статистика FACEIT:**
 • ID: `{faceit_id}`
 • ELO: {elo} (Уровень {level})
 • Регион: {region}
@@ -192,8 +195,7 @@ async def process_new_nickname(message: Message, state: FSMContext):
         
         await search_msg.edit_text(
             success_text,
-            parse_mode="Markdown",
-            reply_markup=get_main_menu_keyboard()
+            parse_mode="Markdown"
         )
         
         logger.info(f"User {user_id} changed profile to {nickname} ({faceit_id})")
@@ -202,8 +204,7 @@ async def process_new_nickname(message: Message, state: FSMContext):
         logger.error(f"Error processing new nickname for user {user_id}: {e}")
         await state.clear()
         await message.answer(
-            "❌ Произошла ошибка при смене профиля. Попробуйте позже.",
-            reply_markup=get_main_menu_keyboard()
+            "❌ Произошла ошибка при смене профиля. Попробуйте позже."
         )
 
 # Обработчик для отмены смены профиля (если пользователь нажмет кнопку во время FSM)

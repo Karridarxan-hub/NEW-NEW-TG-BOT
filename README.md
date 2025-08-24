@@ -1,484 +1,422 @@
-# 🎮 FACEIT CS2 Статистика Бот
+# FACEIT CS2 Telegram Bot
 
-Полнофункциональный Telegram бот для просмотра и анализа статистики игроков FACEIT CS2 с автоматическими уведомлениями о завершении матчей.
+A comprehensive Telegram bot for CS2 players to track their FACEIT statistics, compare performance, analyze matches, and monitor game progress with real-time notifications.
 
-## 🆕 Последние Обновления (v2.1.0)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/your-repo/faceit-cs2-bot)
+[![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
+[![FACEIT API](https://img.shields.io/badge/FACEIT-API%20v4-orange.svg)](https://developers.faceit.com/)
+[![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://docker.com)
 
-### ✅ **Динамическая Статистика по Картам**
-- 🗺️ **Все 9 карт CS2** загружаются автоматически из FACEIT API
-- 📊 **Умная сортировка** по количеству сыгранных матчей
-- 🎯 **Актуальные данные** вместо хардкодного списка
+## 🎯 Overview
 
-### ⏰ **Улучшенная Логика Сессий**
-- 🕒 **10-часовой интервал** (вместо 12) для точной группировки
-- 📅 **Новый формат**: дата, длительность, цветовые индикаторы
-- 📊 **Детальная статистика**: K/D/A, ADR с визуальными показателями
+This bot provides CS2 players with comprehensive FACEIT statistics tracking, including detailed match analysis, player comparisons, form analysis, and automated match notifications. Built with modern async Python using aiogram 3.x, FastAPI, PostgreSQL, and Redis.
 
-### 🎯 **Исправленная Точность Данных**
-- 📈 **Хедшоты**: 46% → 50.1% (исправлен источник данных)
-- 🎲 **Segments вместо Lifetime** для максимальной точности
+## ✨ Key Features
 
-## 🚀 Основные возможности
+### 📊 Player Statistics
+- **Detailed FACEIT Profile**: ELO, level, K/D ratio, win rate, ADR, headshot percentage
+- **HLTV 2.1 Rating**: Advanced performance calculation
+- **Career Statistics**: Total matches, wins/losses, recent performance trends
+- **Profile Management**: Link/change FACEIT accounts, view linked profile
 
-### 📊 Статистика игрока
-- **Общая статистика**: ELO, уровень, K/D, ADR, HLTV 2.1 рейтинг
-- **Статистика по картам**: динамически загружаемые 9 карт CS2 из API
-- **Статистика за сессию**: анализ игр за последние 10 часов с новым форматом
+### 🆚 Player Comparison
+- **Head-to-Head Analysis**: Compare any two FACEIT players
+- **15+ Performance Metrics**: Comprehensive comparison across all key statistics
+- **Visual Indicators**: Emoji-based performance comparison (📈📉➡️)
+- **Smart Categorization**: Grouped metrics (Core Performance, Damage & Efficiency, Career)
 
-### 📝 История матчей
-- Просмотр последних 5/10/30 матчей или пользовательское количество
-- Детальная информация о каждом матче с результатами и статистикой
-- Ссылки на матчи FACEIT для подробного просмотра
+### 📈 Match Analysis
+- **Last Match Details**: Complete statistics from most recent game
+- **Match History**: Browse through recent matches with detailed stats
+- **Form Analysis**: Performance trends over recent games
+- **Map-Specific Stats**: Performance breakdown by map
 
-### 📈 Анализ формы
-- Сравнение статистики за разные периоды (10/20/50 матчей)
-- Анализ трендов: улучшение или ухудшение показателей
-- Детальное сравнение метрик между периодами
+### 🔔 Live Notifications
+- **Auto Match Detection**: Automatic monitoring of finished matches
+- **Real-time Updates**: Get notified when your matches complete
+- **Detailed Match Results**: Win/loss, stats, HLTV rating, opponent info
+- **Customizable Settings**: Enable/disable notifications per user
 
-### 🎮 Последний матч
-- Подробная информация о последнем сыгранном матче
-- **Автоматические уведомления** при завершении матча
-- Полные составы команд с индивидуальной статистикой
+### 🎮 Advanced Features
+- **Current Match Status**: Monitor ongoing matches (in development)
+- **Form Analysis**: Performance trends and consistency tracking
+- **Interactive Keyboards**: User-friendly button-based navigation
+- **Multi-language Support**: Russian and English interfaces
 
-### ⚔️ Сравнение игроков
-- Добавление до нескольких игроков для сравнения
-- Детальное сравнение по всем ключевым метрикам
-- Ранжирование игроков по различным показателям
+## 🚀 Quick Start
 
-### 🔍 Анализ текущего матча
-- Анализ силы команд по ссылке на матч FACEIT
-- Статистика игроков и прогноз на основе данных
-- Средние показатели команд и ключевые игроки
+### Prerequisites
+- Python 3.11+
+- Docker & Docker Compose (recommended)
+- Telegram Bot Token (from @BotFather)
+- FACEIT API Key (from [FACEIT Developers](https://developers.faceit.com/))
 
-### 👤 Профиль и настройки
-- Управление привязанным FACEIT профилем
-- Настройки уведомлений о матчах
-- Возможность смены профиля
+### Option 1: Docker Deployment (Recommended)
 
-## 🛠️ Технические характеристики
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd faceit-cs2-bot
+   ```
 
-### Технологический стек
-- **Python 3.11+**
-- **aiogram 3.x** - для Telegram бота
-- **FastAPI** - для API endpoints
-- **httpx** - для асинхронных HTTP запросов
-- **uvicorn** - ASGI сервер
+2. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
 
-### Архитектура
-- **Модульная структура** с разделением обязанностей
-- **Асинхронная обработка** всех запросов
-- **Временное хранилище в памяти** для быстрой работы
-- **Кэширование API запросов** для оптимизации
+3. **Start the bot**
+   ```bash
+   docker-compose up -d
+   ```
 
-## 📋 Установка и настройка
+4. **Verify deployment**
+   ```bash
+   # Check container status
+   docker-compose ps
+   
+   # View logs
+   docker-compose logs -f faceit-bot
+   
+   # Health check
+   curl http://localhost:8080/health
+   ```
 
-### 🐳 Быстрый старт с Docker (Рекомендуется)
+### Option 2: Manual Installation
 
-```bash
-# Клонируйте репозиторий
-git clone <repository-url>
-cd faceit-cs2-bot
+1. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Настройте переменные окружения
-cp .env.example .env
-nano .env  # Добавьте ваши API ключи
+2. **Set up databases**
+   ```bash
+   # PostgreSQL
+   createdb faceit_bot
+   psql faceit_bot < migrations/init.sql
+   
+   # Redis
+   redis-server
+   ```
 
-# Запуск в режиме разработки
-docker-compose up --build
+3. **Configure environment**
+   ```bash
+   export BOT_TOKEN="your_bot_token"
+   export FACEIT_API_KEY="your_faceit_api_key"
+   export DATABASE_URL="postgresql://user:password@localhost/faceit_bot"
+   export REDIS_URL="redis://localhost:6379/0"
+   ```
 
-# Или используйте готовый скрипт развертывания
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh dev
-```
+4. **Run the bot**
+   ```bash
+   python main.py
+   ```
 
-### 🛠️ Традиционная установка
+## 🔧 Configuration
 
-```bash
-# Клонируйте репозиторий
-git clone <repository-url>
-cd faceit-cs2-bot
+### Environment Variables
 
-# Установите зависимости
-pip install -r requirements.txt
-```
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `BOT_TOKEN` | ✅ | Telegram Bot API token | - |
+| `FACEIT_API_KEY` | ✅ | FACEIT Data API key | - |
+| `DATABASE_URL` | ✅ | PostgreSQL connection string | - |
+| `REDIS_URL` | ✅ | Redis connection string | - |
+| `DEBUG` | ❌ | Enable debug mode | `false` |
+| `WEBHOOK_URL` | ❌ | Webhook URL for production | - |
+| `CACHE_TTL` | ❌ | Cache time-to-live (seconds) | `300` |
 
-### 2. Настройка переменных окружения
-
-Создайте файл `.env` на основе `.env.example`:
-
-```bash
-cp .env.example .env
-```
-
-Заполните необходимые данные в `.env`:
-
-```env
-BOT_TOKEN=ваш_telegram_bot_token
-FACEIT_API_KEY=ваш_faceit_api_key
-WEBHOOK_URL=ваш_webhook_url_для_уведомлений
-DEBUG=true
-```
-
-### 3. Получение API ключей
+### Getting API Keys
 
 #### Telegram Bot Token
-1. Найдите [@BotFather](https://t.me/botfather) в Telegram
-2. Создайте нового бота командой `/newbot`
-3. Следуйте инструкциям и получите токен
-4. Добавьте токен в `.env` файл
+1. Message [@BotFather](https://t.me/botfather) on Telegram
+2. Send `/newbot` and follow instructions
+3. Copy the provided token to `BOT_TOKEN`
 
 #### FACEIT API Key
-1. Зарегистрируйтесь на [FACEIT Developer Portal](https://developers.faceit.com)
-2. Создайте новое приложение
-3. Получите Server-side API ключ
-4. Добавьте ключ в `.env` файл
+1. Visit [FACEIT Developers](https://developers.faceit.com/)
+2. Create an account or sign in
+3. Create a new application
+4. Generate a Server-side API key
+5. Copy the key to `FACEIT_API_KEY`
 
-### 4. Запуск бота
+## 📱 Bot Usage
 
-#### 🐳 Запуск с Docker
+### Getting Started
+1. Start the bot: `/start`
+2. Enter your FACEIT nickname when prompted
+3. Use the button menu to navigate features
 
-```bash
-# Разработка
-docker-compose up --build
+### Main Commands
 
-# Продакшен
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+| Command | Description |
+|---------|-------------|
+| `/start` | Initialize bot and link FACEIT profile |
+| **📊 Статистика** | View your detailed FACEIT statistics |
+| **🆚 Сравнение** | Compare two players' performance |
+| **📈 История матчей** | Browse match history with filters |
+| **🔍 Последний матч** | View your most recent match details |
+| **📋 Анализ формы** | Analyze performance trends |
+| **👤 Профиль** | Manage your linked FACEIT account |
+| **⚙️ Настройки** | Configure bot preferences |
 
-# Используя скрипты
-./scripts/deploy.sh dev     # Разработка
-./scripts/deploy.sh prod    # Продакшен
+### Player Comparison Workflow
+1. Select **🆚 Сравнение**
+2. Choose **➕ Добавить себя** or **👤 Добавить игрока**
+3. Add second player using **👤 Добавить игрока**
+4. Click **📊 Сравнить!** to see detailed comparison
+5. Use **🗑️ Очистить** to reset and start over
+
+## 🏗️ Architecture
+
+### Technology Stack
+- **Backend**: Python 3.11, aiogram 3.x, FastAPI
+- **Databases**: PostgreSQL (primary), Redis (caching)
+- **API**: FACEIT Data API v4
+- **Deployment**: Docker, Docker Compose
+- **Monitoring**: Health checks, logging, metrics
+
+### Project Structure
+```
+faceit-cs2-bot/
+├── bot/
+│   ├── handlers/          # Telegram command handlers
+│   └── services/          # Business logic services
+├── migrations/            # Database schema
+├── nginx/                 # Reverse proxy config
+├── scripts/              # Deployment scripts
+├── main.py               # Application entry point
+├── faceit_client.py      # FACEIT API client
+├── storage.py            # Database abstraction
+├── keyboards.py          # Telegram keyboards
+└── config.py             # Configuration management
 ```
 
-#### 🐍 Локальный запуск
+### Key Components
+
+#### Handler System
+- **main_handler.py**: Core navigation and user flow
+- **stats_handler.py**: Player statistics display
+- **comparison_handler.py**: Player comparison with FSM
+- **match_handler.py**: Match analysis and history
+- **profile_handler.py**: Account management
+- **notifications_handler.py**: Match notification system
+
+#### API Integration
+- **FaceitAPIClient**: Async HTTP client with rate limiting
+- **Caching Layer**: Redis-backed response caching
+- **Error Handling**: Comprehensive retry and fallback logic
+
+#### Data Storage
+- **PostgreSQL**: User profiles, match history, settings
+- **Redis**: API response caching, session storage
+- **Migration System**: Versioned database schemas
+
+## 🔔 Notification System
+
+The bot includes an advanced match monitoring system:
+
+### Features
+- **Automatic Detection**: Monitors FACEIT for completed matches
+- **Real-time Notifications**: Instant alerts when matches finish
+- **Detailed Results**: Complete match statistics and performance
+- **User Preferences**: Enable/disable notifications per user
+- **Webhook Support**: FACEIT webhook integration for instant updates
+
+### Notification Flow
+1. **Match Monitoring**: Background task checks for new matches every 5 minutes
+2. **Match Detection**: Identifies completed matches for registered users
+3. **Data Enrichment**: Fetches detailed match statistics and results
+4. **Smart Notifications**: Sends formatted results with performance analysis
+5. **History Storage**: Automatically saves matches to user history
+
+## 📊 API Endpoints
+
+The bot includes a FastAPI web server with REST endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API information and status |
+| `/health` | GET | System health check |
+| `/api/player/search/{nickname}` | GET | Search player by nickname |
+| `/api/player/{player_id}/stats` | GET | Get player statistics |
+| `/api/stats` | GET | Bot usage statistics |
+| `/webhook/faceit` | POST | FACEIT webhook receiver |
+
+## 🐳 Docker Deployment
+
+### Production Setup
+
+1. **Production Configuration**
+   ```bash
+   # Use production compose file
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+2. **Scaling**
+   ```bash
+   # Scale bot instances
+   docker-compose up -d --scale faceit-bot=3
+   ```
+
+3. **Monitoring**
+   ```bash
+   # Container stats
+   docker stats faceit_cs2_bot
+   
+   # Application health
+   curl http://localhost:8080/health
+   ```
+
+### Development Setup
 
 ```bash
-# Запуск в режиме разработки
-python main.py
-
-# Запуск в продакшн режиме
-uvicorn main:app --host 0.0.0.0 --port 8000
+# Development environment with hot reload
+docker-compose -f docker-compose.dev.yml up
 ```
 
-Бот автоматически запустится в polling режиме и будет готов к работе.
+## 🔍 Monitoring & Maintenance
 
-## 📱 Использование
+### Health Checks
+- **Container Health**: Docker health checks every 30 seconds
+- **API Health**: `/health` endpoint with service status
+- **Database Health**: Connection and query validation
+- **FACEIT API**: External API availability checking
 
-### Первый запуск
-1. Найдите вашего бота в Telegram
-2. Отправьте команду `/start`
-3. Введите ваш никнейм FACEIT
-4. Начните использовать все функции!
+### Logging
+- **Structured Logging**: JSON format with severity levels
+- **Log Rotation**: Automatic cleanup of old log files
+- **Sensitive Data**: Automatic masking of API keys and tokens
+- **Performance Metrics**: Response times and error rates
 
-### Основное меню
-После привязки профиля доступны следующие разделы:
-- 📊 **Статистика игрока** - просмотр детальной статистики
-- 📝 **История матчей** - анализ последних игр
-- 📈 **Анализ формы** - сравнение периодов
-- 🎮 **Последний матч** - информация о последней игре
-- ⚔️ **Сравнение игроков** - сопоставление статистики
-- 🔍 **Анализ текущего матча** - анализ по ссылке
-- 👤 **Профиль** - управление аккаунтом
-- ⚙️ **Настройки** - конфигурация бота
-- ❓ **Помощь** - справочная информация
-
-### Автоматические уведомления
-- Бот автоматически отслеживает ваши матчи
-- При завершении матча приходит уведомление с результатом
-- В уведомлении указана ваша статистика и общий результат
-- Уведомления можно отключить в настройках
-
-## 🔧 API Endpoints
-
-Бот предоставляет несколько полезных API endpoints:
-
-- `GET /` - статус приложения
-- `GET /health` - проверка здоровья системы
-- `GET /api/player/search/{nickname}` - поиск игрока
-- `GET /api/player/{player_id}/stats` - статистика игрока
-- `GET /api/stats` - статистика бота
-- `POST /webhook/faceit` - webhook для FACEIT уведомлений
-
-## 🐳 Управление Docker контейнерами
-
-### Основные команды
-
+### Backup & Recovery
 ```bash
-# Просмотр статуса
+# Database backup
+docker exec faceit_postgres pg_dump -U faceit_user faceit_bot > backup.sql
+
+# Redis backup  
+docker exec faceit_redis redis-cli SAVE
+```
+
+## 🛠️ Development
+
+### Local Development
+
+1. **Setup development environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # or venv\Scripts\activate on Windows
+   pip install -r requirements.txt
+   ```
+
+2. **Run tests**
+   ```bash
+   pytest
+   pytest --cov=. --cov-report=html
+   ```
+
+3. **Code quality**
+   ```bash
+   flake8 .
+   black .
+   mypy .
+   ```
+
+### Contributing Guidelines
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes with tests
+4. Run the test suite
+5. Submit a pull request
+
+## 📋 Version History
+
+### v2.1.1 (Latest)
+- ✅ Enhanced player comparison with 15+ metrics
+- ✅ Improved UI with emoji indicators
+- ✅ Fixed profile management and display
+- ✅ Added current match analysis placeholder
+
+### v2.1.0
+- ✅ Complete player comparison system overhaul
+- ✅ FSM-based conversation flow
+- ✅ Reply keyboard interface improvements
+- ✅ Enhanced error handling and user feedback
+
+### v2.0.0
+- ✅ Major architecture refactoring
+- ✅ Async/await throughout codebase
+- ✅ Docker containerization
+- ✅ PostgreSQL + Redis integration
+- ✅ Real-time match notifications
+
+## 🚧 Roadmap
+
+### Planned Features
+- **Advanced Analytics**: Historical performance trends and predictions
+- **Team Statistics**: Support for team-based analysis
+- **Tournament Tracking**: Monitor ongoing tournaments and events
+- **Custom Alerts**: User-defined notification triggers
+- **Web Dashboard**: Browser-based statistics interface
+
+### Technical Improvements  
+- **GraphQL API**: More flexible data querying
+- **Microservices**: Split into smaller, focused services
+- **ML Integration**: Performance prediction and analysis
+- **Multi-language**: Support for additional languages
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+#### Bot Not Responding
+```bash
+# Check container status
 docker-compose ps
 
-# Просмотр логов
-docker-compose logs -f
-docker-compose logs -f faceit-bot  # Конкретный сервис
+# View recent logs
+docker-compose logs --tail 50 faceit-bot
 
-# Перезапуск сервисов
-docker-compose restart
-docker-compose restart faceit-bot  # Конкретный сервис
-
-# Остановка
-docker-compose down
-
-# Полная пересборка
-docker-compose down
-docker-compose up --build --force-recreate
-
-# Очистка volumes и images
-docker-compose down -v --rmi all
+# Restart the bot
+docker-compose restart faceit-bot
 ```
 
-### Полезные скрипты
-
+#### Database Connection Issues
 ```bash
-# Проверка состояния системы
-./scripts/health-check.sh
-./scripts/health-check.sh --detailed
+# Check PostgreSQL status
+docker-compose exec postgres pg_isready -U faceit_user
 
-# Создание резервной копии
-./scripts/backup.sh
-./scripts/backup.sh --full
-
-# Автоматическое развертывание
-./scripts/deploy.sh prod --rebuild
+# Reset database
+docker-compose down -v
+docker-compose up -d
 ```
 
-### Мониторинг ресурсов
+#### API Rate Limiting
+- **Symptoms**: Slow responses, timeout errors
+- **Solution**: The bot includes automatic rate limiting and retry logic
+- **Monitoring**: Check logs for "rate limit" messages
 
-```bash
-# Использование ресурсов
-docker stats
+### Getting Help
 
-# Размер контейнеров
-docker images | grep faceit
+1. **Check the logs**: `docker-compose logs faceit-bot`
+2. **Verify configuration**: Ensure all required environment variables are set
+3. **Test API keys**: Use the health endpoint to verify API connectivity
+4. **Create an issue**: Include logs and configuration details (remove sensitive data)
 
-# Очистка системы
-docker system prune -f
-docker volume prune -f
-```
+## 📄 License
 
-## 🧪 Тестирование
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### Локальные тесты
+## 🙏 Acknowledgments
 
-```bash
-# Запуск всех тестов
-pytest test_bot.py -v
-
-# Запуск конкретного теста
-pytest test_bot.py::TestFaceitClient::test_calculate_hltv_rating -v
-
-# Запуск с покрытием кода
-pytest test_bot.py --cov=. --cov-report=html
-```
-
-### Тесты в Docker
-
-```bash
-# Запуск тестов в контейнере
-docker-compose run --rm faceit-bot pytest test_bot.py -v
-
-# Тесты с coverage в контейнере
-docker-compose run --rm faceit-bot pytest test_bot.py --cov=. --cov-report=html
-
-# Линтинг кода
-docker-compose run --rm faceit-bot flake8 . --max-line-length=88
-docker-compose run --rm faceit-bot black . --check
-```
-
-Тесты покрывают:
-- ✅ FACEIT API клиент
-- ✅ Система хранения данных
-- ✅ Обработчики бота
-- ✅ Расчет статистики
-- ✅ Форматирование данных
-
-## 📊 Метрики и статистика
-
-### HLTV 2.1 Рейтинг
-Бот использует стандартную формулу HLTV 2.1:
-
-```
-Rating = 0.0073×KAST + 0.3591×KPR - 0.5329×DPR + 0.2372×Impact + 0.0032×ADR + 0.1587
-```
-
-Где:
-- **KAST** - процент участия в раундах
-- **KPR** - убийства за раунд
-- **DPR** - смерти за раунд
-- **Impact** - влияние на игру
-- **ADR** - средний урон за раунд
-
-### Поддерживаемые метрики
-- 🎯 K/D/A соотношения
-- 💥 ADR (Average Damage per Round)
-- 🎯 HLTV 2.1 рейтинг
-- 📍 KAST (Kill/Assist/Survival/Trade)
-- 🎯 Процент хедшотов
-- ⚡ Первые убийства/смерти
-- 💣 Урон от гранат и молотовов
-- 😵‍💫 Количество ослеплений
-
-## 🔒 Безопасность
-
-- ✅ Все API ключи хранятся в переменных окружения
-- ✅ Нет логирования чувствительных данных
-- ✅ Валидация входящих данных
-- ✅ Ограничения по частоте запросов к FACEIT API
-- ✅ Безопасное хранение временных данных
-
-## 🌐 Развертывание в продакшене
-
-### Подготовка сервера
-
-```bash
-# Обновление системы (Ubuntu/Debian)
-sudo apt update && sudo apt upgrade -y
-
-# Установка Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER
-
-# Установка Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-### Развертывание приложения
-
-```bash
-# Клонирование в продакшен директорию
-sudo mkdir -p /opt/faceit-bot
-sudo chown $USER:$USER /opt/faceit-bot
-cd /opt/faceit-bot
-
-git clone <repository-url> .
-
-# Настройка production .env
-cp .env.example .env
-nano .env  # Отредактируйте с production настройками
-
-# Создание директорий
-mkdir -p logs data nginx/ssl
-
-# Запуск в продакшене
-./scripts/deploy.sh prod
-```
-
-### Мониторинг и обслуживание
-
-```bash
-# Проверка состояния
-./scripts/health-check.sh --detailed
-
-# Создание резервных копий (настройте cron)
-0 2 * * * /opt/faceit-bot/scripts/backup.sh --full
-
-# Обновление приложения
-./scripts/deploy.sh prod --rebuild
-
-# Просмотр логов
-docker-compose logs -f --tail=100
-```
-
-## 🌐 Системные требования
-
-### Минимальные требования
-- **OS**: Linux (Ubuntu 20.04+), macOS, Windows 10+
-- **Docker**: 20.10+
-- **Docker Compose**: 2.0+
-- **RAM**: 512MB
-- **CPU**: 1 ядро
-- **Дисковое пространство**: 1GB
-- **Интернет**: стабильное соединение для API запросов
-
-### Рекомендуемые требования
-- **OS**: Linux (Ubuntu 22.04 LTS)
-- **Docker**: 24.0+
-- **Docker Compose**: 2.20+
-- **RAM**: 2GB
-- **CPU**: 2+ ядра
-- **Дисковое пространство**: 5GB SSD
-- **Интернет**: высокоскоростное соединение
-
-## 📈 Производительность
-
-### Оптимизации
-- **Кэширование** API ответов (5 минут для игроков, 1 час для матчей)
-- **Асинхронная обработка** всех запросов
-- **Батчинг** множественных API вызовов
-- **Ограничение скорости** запросов к FACEIT API
-
-### Ограничения FACEIT API
-- **10,000 запросов/час** - базовый лимит
-- **Рекомендация**: не более 1 запроса в секунду
-- **Кэширование**: активно используется для снижения нагрузки
-
-## 🚨 Устранение неполадок
-
-### Частые проблемы
-
-#### "Профиль не найден"
-- Проверьте правильность написания никнейма
-- Убедитесь, что игрок играет в CS2 на FACEIT
-- Проверьте, что профиль не приватный
-
-#### "Не удалось загрузить статистику"
-- Проверьте подключение к интернету
-- Убедитесь, что FACEIT API ключ действителен
-- Проверьте лимиты API запросов
-
-#### "Ошибка запуска бота"
-- Проверьте правильность BOT_TOKEN
-- Убедитесь, что все зависимости установлены
-- Проверьте файл `.env`
-
-### Логи и отладка
-
-```bash
-# Запуск с детальными логами
-DEBUG=true python main.py
-
-# Проверка статуса через API
-curl http://localhost:8000/health
-```
-
-## 🤝 Вклад в проект
-
-### Как помочь проекту
-1. 🐛 Сообщайте об ошибках через Issues
-2. 💡 Предлагайте новые функции
-3. 🔧 Отправляйте Pull Requests с улучшениями
-4. 📖 Улучшайте документацию
-5. 🧪 Добавляйте тесты
-
-### Структура кода
-```
-project/
-├── main.py                 # Основной файл приложения
-├── config.py              # Конфигурация
-├── storage.py             # Система хранения
-├── faceit_client.py       # FACEIT API клиент
-├── keyboards.py           # Telegram клавиатуры
-├── bot_handlers.py        # Основные обработчики
-├── match_handlers.py      # Обработчики матчей
-├── history_handlers.py    # Обработчики истории
-├── additional_handlers.py # Дополнительные функции
-├── test_bot.py           # Тесты
-└── requirements.txt      # Зависимости
-```
-
-## 📝 Лицензия
-
-Этот проект является открытым исходным кодом. Вы можете свободно использовать, изменять и распространять его.
-
-## 📞 Поддержка
-
-При возникновении вопросов или проблем:
-1. Проверьте раздел [Устранение неполадок](#-устранение-неполадок)
-2. Посмотрите [Issues](https://github.com/your-repo/issues) на GitHub
-3. Создайте новый Issue с описанием проблемы
+- [FACEIT](https://faceit.com) for providing the CS2 statistics API
+- [aiogram](https://github.com/aiogram/aiogram) for the excellent Telegram Bot framework
+- [FastAPI](https://fastapi.tiangolo.com/) for the modern web framework
+- The CS2 community for feedback and feature requests
 
 ---
 
-**Разработано с ❤️ для сообщества CS2 и FACEIT**
+**Built with ❤️ for the CS2 community**
 
-🎮 Удачных игр и высокого HLTV рейтинга!
+For questions, feature requests, or bug reports, please create an issue in the repository.

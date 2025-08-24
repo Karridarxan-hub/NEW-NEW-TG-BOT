@@ -45,17 +45,17 @@ def get_player_stats_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_match_history_keyboard() -> InlineKeyboardMarkup:
-    """Меню истории матчей"""
+    """Меню истории матчей - новая упрощенная версия"""
     builder = InlineKeyboardBuilder()
     
-    builder.button(text="5️⃣ Последние 5 матчей", callback_data="history_5")
-    builder.button(text="🔟 Последние 10 матчей", callback_data="history_10")
-    builder.button(text="3️⃣0️⃣ Последние 30 матчей", callback_data="history_30")
+    # 4 основные кнопки как просил пользователь
+    builder.button(text="5 матчей", callback_data="history_5")
+    builder.button(text="10 матчей", callback_data="history_10")
+    builder.button(text="30 матчей", callback_data="history_30")
     builder.button(text="✏️ Ввести вручную", callback_data="history_custom")
     builder.button(text="🔙 Назад", callback_data="back_to_main")
-    builder.button(text="🏠 Главное меню", callback_data="main_menu")
     
-    builder.adjust(2, 2, 2)
+    builder.adjust(2, 2, 1)  # 2 кнопки в первых двух рядах, 1 кнопка назад
     return builder.as_markup()
 
 
@@ -63,9 +63,9 @@ def get_form_analysis_keyboard() -> InlineKeyboardMarkup:
     """Меню анализа формы"""
     builder = InlineKeyboardBuilder()
     
-    builder.button(text="🔟 10 матчей vs 10 предыдущих", callback_data="form_10")
-    builder.button(text="2️⃣0️⃣ 20 матчей vs 20 предыдущих", callback_data="form_20")
-    builder.button(text="5️⃣0️⃣ 50 матчей vs 50 предыдущих", callback_data="form_50")
+    builder.button(text="📊 Анализ 10 матчей", callback_data="form_10")
+    builder.button(text="📈 Анализ 20 матчей", callback_data="form_20")
+    builder.button(text="📋 Анализ 50 матчей", callback_data="form_50")
     builder.button(text="✏️ Ввести вручную", callback_data="form_custom")
     builder.button(text="🔙 Назад", callback_data="back_to_main")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
@@ -86,13 +86,11 @@ def get_player_comparison_keyboard(show_comparison: bool = False) -> InlineKeybo
         builder.button(text="📊 Получить сравнение", callback_data="comparison_get")
     
     builder.button(text="🗑️ Очистить данные", callback_data="comparison_clear")
-    builder.button(text="🔙 Назад", callback_data="back_to_main")
-    builder.button(text="🏠 Главное меню", callback_data="main_menu")
     
     if show_comparison:
-        builder.adjust(1, 1, 1, 1, 2)
+        builder.adjust(1, 1, 1, 1)
     else:
-        builder.adjust(1, 1, 1, 2)
+        builder.adjust(1, 1, 1)
     
     return builder.as_markup()
 
@@ -194,13 +192,13 @@ def get_help_keyboard() -> InlineKeyboardMarkup:
     """Меню помощи"""
     builder = InlineKeyboardBuilder()
     
+    builder.button(text="📖 Описание бота", callback_data="help_description")
     builder.button(text="📖 Описание функций", callback_data="help_functions")
-    builder.button(text="🧮 Как считается HLTV 2.1", callback_data="help_hltv")
     builder.button(text="💬 Связаться с разработчиком", callback_data="help_contact")
     builder.button(text="🔙 Назад", callback_data="back_to_main")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
     
-    builder.adjust(1, 1, 1, 2)
+    builder.adjust(2, 1, 2)
     return builder.as_markup()
 
 
@@ -274,12 +272,11 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
     builder.button(text="⚔️ Сравнение")
     builder.button(text="🔍 Анализ матча")
     
-    # Третий ряд - профиль и настройки
+    # Третий ряд - профиль и помощь
     builder.button(text="👤 Профиль")
-    builder.button(text="⚙️ Настройки")
     builder.button(text="❓ Помощь")
     
-    builder.adjust(3, 3, 3)
+    builder.adjust(3, 3, 2)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 
@@ -300,9 +297,9 @@ def get_history_reply_keyboard() -> ReplyKeyboardMarkup:
     """Reply-клавиатура для истории матчей"""
     builder = ReplyKeyboardBuilder()
     
-    builder.button(text="5️⃣ Последние 5")
-    builder.button(text="🔟 Последние 10")
-    builder.button(text="3️⃣0️⃣ Последние 30")
+    builder.button(text="5 матчей")
+    builder.button(text="10 матчей")
+    builder.button(text="30 матчей")
     builder.button(text="✏️ Ввести число")
     builder.button(text="🔙 Назад")
     
@@ -314,9 +311,9 @@ def get_form_reply_keyboard() -> ReplyKeyboardMarkup:
     """Reply-клавиатура для анализа формы"""
     builder = ReplyKeyboardBuilder()
     
-    builder.button(text="🔟 vs 10 предыдущих")
-    builder.button(text="2️⃣0️⃣ vs 20 предыдущих")
-    builder.button(text="5️⃣0️⃣ vs 50 предыдущих")
+    builder.button(text="📊 Анализ 10 матчей")
+    builder.button(text="📈 Анализ 20 матчей")
+    builder.button(text="📋 Анализ 50 матчей")
     builder.button(text="✏️ Свой период")
     builder.button(text="🔙 Назад")
     
@@ -324,37 +321,37 @@ def get_form_reply_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 
-def get_comparison_reply_keyboard(show_comparison: bool = False) -> ReplyKeyboardMarkup:
+def get_comparison_reply_keyboard(show_comparison: bool = False, players_count: int = 0) -> ReplyKeyboardMarkup:
     """Reply-клавиатура для сравнения игроков"""
     builder = ReplyKeyboardBuilder()
     
-    builder.button(text="➕ Добавить себя")
-    builder.button(text="👤 Добавить игрока")
+    # Показываем кнопки добавления только если меньше 2 игроков
+    if players_count < 2:
+        builder.button(text="➕ Добавить себя")
+        builder.button(text="👤 Добавить игрока")
     
+    # Показываем кнопку сравнения когда ровно 2 игрока
     if show_comparison:
-        builder.button(text="📊 Получить сравнение")
+        builder.button(text="📊 Сравнить!")
         
     builder.button(text="🗑️ Очистить")
     builder.button(text="🔙 Назад")
     
-    if show_comparison:
-        builder.adjust(2, 1, 1, 1)
+    # Настраиваем расположение кнопок в зависимости от количества
+    if players_count < 2:
+        if show_comparison:
+            builder.adjust(2, 1, 1, 1)  # Добавить себя, Добавить игрока | Сравнить | Очистить | Назад
+        else:
+            builder.adjust(2, 1, 1)     # Добавить себя, Добавить игрока | Очистить | Назад
     else:
-        builder.adjust(2, 1, 1)
+        if show_comparison:
+            builder.adjust(1, 1, 1)     # Сравнить | Очистить | Назад
+        else:
+            builder.adjust(1, 1)        # Очистить | Назад
     
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 
-def get_settings_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Reply-клавиатура для настроек"""
-    builder = ReplyKeyboardBuilder()
-    
-    builder.button(text="🔔 Уведомления")
-    builder.button(text="⭐ Подписка")
-    builder.button(text="🔙 Назад")
-    
-    builder.adjust(2, 1)
-    return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 
 def get_help_reply_keyboard() -> ReplyKeyboardMarkup:
@@ -362,11 +359,10 @@ def get_help_reply_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
     builder.button(text="📖 Описание функций")
-    builder.button(text="🧮 HLTV 2.1")
     builder.button(text="💬 Связаться")
     builder.button(text="🔙 Назад")
     
-    builder.adjust(2, 1, 1)
+    builder.adjust(1, 1, 1)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 
@@ -375,7 +371,9 @@ def get_profile_reply_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
     builder.button(text="🔄 Сменить профиль")
+    builder.button(text="🔔 Уведомления")
+    builder.button(text="⭐ Подписка")
     builder.button(text="🔙 Назад")
     
-    builder.adjust(1, 1)
+    builder.adjust(1, 2, 1)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)

@@ -1,48 +1,47 @@
 # Многоэтапная сборка для оптимизации размера контейнера
 FROM python:3.11-slim as builder
 
-# Устанавливаем системные зависимости для сборки
+# Устанавливаем системные зависимости для сборки в одном слое
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Создаем виртуальное окружение
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Копируем файл зависимостей
+# ВАЖНО: Копируем только requirements.txt для кеширования
 COPY requirements.txt .
 
-# Устанавливаем Python зависимости
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Устанавливаем Python зависимости с оптимизацией
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip cache purge
 
 # Производственный образ
 FROM python:3.11-slim as production
 
-# Создаем пользователя для безопасности
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
-
-# Устанавливаем системные зависимости времени выполнения
+# Устанавливаем runtime зависимости и создаем пользователя в одном слое
 RUN apt-get update && apt-get install -y \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 # Копируем виртуальное окружение из builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Создаем рабочую директорию
+# Создаем рабочую директорию и директории для данных
 WORKDIR /app
+RUN mkdir -p /app/logs /app/data
 
-# Копируем код приложения
+# Копируем код приложения (это должно быть последним для лучшего кеширования)
 COPY --chown=appuser:appuser . .
-
-# Создаем директории для логов и данных
-RUN mkdir -p /app/logs /app/data && \
-    chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app
 
 # Переключаемся на непривилегированного пользователя
 USER appuser
@@ -55,7 +54,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Открываем порт для FastAPI
 EXPOSE 8000
 
-# Health check для мониторинга состояния
+# Health check для мониторинга состояния (оптимизированный)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 

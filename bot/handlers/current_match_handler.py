@@ -78,7 +78,7 @@ def calculate_team_strength(players_stats: List[Dict[str, Any]]) -> Dict[str, An
     """
     if not players_stats:
         return {
-            'avg_hltv': 0.0,
+            'avg_rating': 0.0,
             'avg_elo': 0,
             'avg_level': 0,
             'strong_players': [],
@@ -87,37 +87,37 @@ def calculate_team_strength(players_stats: List[Dict[str, Any]]) -> Dict[str, An
             'avg_winrate': 0.0
         }
     
-    hltv_ratings = []
+    player_ratings = []
     elos = []
     levels = []
     winrates = []
     total_matches = 0
     
-    strong_players = []  # HLTV > 1.1
-    weak_players = []    # HLTV < 0.9
+    strong_players = []  # Rating > 1.1
+    weak_players = []    # Rating < 0.9
     
     for player_stats in players_stats:
-        hltv = player_stats.get('hltv_rating', 0.0)
+        rating = player_stats.get('hltv_rating', 0.0)
         elo = player_stats.get('elo', 0)
         level = player_stats.get('level', 0)
         winrate = player_stats.get('winrate', 0.0)
         matches = player_stats.get('matches', 0)
         nickname = player_stats.get('nickname', 'Unknown')
         
-        if hltv > 0:
-            hltv_ratings.append(hltv)
+        if rating > 0:
+            player_ratings.append(rating)
             
-            if hltv >= 1.1:
+            if rating >= 1.1:
                 strong_players.append({
                     'nickname': nickname,
-                    'hltv': hltv,
+                    'rating': rating,
                     'elo': elo,
                     'level': level
                 })
-            elif hltv < 0.9:
+            elif rating < 0.9:
                 weak_players.append({
                     'nickname': nickname,
-                    'hltv': hltv,
+                    'rating': rating,
                     'elo': elo,
                     'level': level
                 })
@@ -132,12 +132,12 @@ def calculate_team_strength(players_stats: List[Dict[str, Any]]) -> Dict[str, An
             total_matches += matches
     
     return {
-        'avg_hltv': round(sum(hltv_ratings) / len(hltv_ratings), 3) if hltv_ratings else 0.0,
+        'avg_rating': round(sum(player_ratings) / len(player_ratings), 3) if player_ratings else 0.0,
         'avg_elo': round(sum(elos) / len(elos)) if elos else 0,
         'avg_level': round(sum(levels) / len(levels), 1) if levels else 0,
         'avg_winrate': round(sum(winrates) / len(winrates), 1) if winrates else 0.0,
-        'strong_players': sorted(strong_players, key=lambda x: x['hltv'], reverse=True),
-        'weak_players': sorted(weak_players, key=lambda x: x['hltv']),
+        'strong_players': sorted(strong_players, key=lambda x: x['rating'], reverse=True),
+        'weak_players': sorted(weak_players, key=lambda x: x['rating']),
         'total_matches': total_matches,
         'player_count': len(players_stats)
     }
@@ -174,14 +174,14 @@ def analyze_map_performance(players_stats: List[Dict[str, Any]], map_name: str) 
         if map_data and isinstance(map_data, dict):
             matches = map_data.get('matches', 0)
             winrate = map_data.get('winrate', 0.0)
-            hltv = map_data.get('hltv_rating', 0.0)
+            rating = map_data.get('hltv_rating', 0.0)
             
             if matches > 0:  # Учитываем только игроков с опытом на карте
                 map_performances.append({
                     'nickname': player_stats.get('nickname', 'Unknown'),
                     'winrate': winrate,
                     'matches': matches,
-                    'hltv': hltv
+                    'rating': rating
                 })
                 total_matches += matches
                 players_with_data += 1
@@ -204,8 +204,8 @@ def analyze_map_performance(players_stats: List[Dict[str, Any]], map_name: str) 
             weighted_winrate += perf['winrate'] * weight
     
     # Определяем лучшего и худшего игрока на карте
-    best_player = max(map_performances, key=lambda x: (x['winrate'], x['hltv']))
-    worst_player = min(map_performances, key=lambda x: (x['winrate'], x['hltv']))
+    best_player = max(map_performances, key=lambda x: (x['winrate'], x['rating']))
+    worst_player = min(map_performances, key=lambda x: (x['winrate'], x['rating']))
     
     # Определяем уровень достоверности анализа
     confidence_level = 'low'
@@ -379,19 +379,19 @@ def generate_match_prediction(team1_strength: Dict, team2_strength: Dict,
     team1_name, team2_name = team_names
     
     # Базовый анализ силы команд
-    hltv_diff = team1_strength['avg_hltv'] - team2_strength['avg_hltv']
+    rating_diff = team1_strength['avg_rating'] - team2_strength['avg_rating']
     elo_diff = team1_strength['avg_elo'] - team2_strength['avg_elo']
     
     # Счетчики преимуществ
     team1_advantages = []
     team2_advantages = []
     
-    # Анализ HLTV рейтингов
-    if abs(hltv_diff) > 0.1:
-        if hltv_diff > 0:
-            team1_advantages.append(f"Превосходство по HLTV (+{hltv_diff:.3f})")
+    # Анализ рейтингов игроков
+    if abs(rating_diff) > 0.1:
+        if rating_diff > 0:
+            team1_advantages.append(f"Превосходство по рейтингу (+{rating_diff:.3f})")
         else:
-            team2_advantages.append(f"Превосходство по HLTV (+{abs(hltv_diff):.3f})")
+            team2_advantages.append(f"Превосходство по рейтингу (+{abs(rating_diff):.3f})")
     
     # Анализ ELO
     if abs(elo_diff) > 50:
@@ -426,9 +426,9 @@ def generate_match_prediction(team1_strength: Dict, team2_strength: Dict,
     total_team1_score = len(team1_advantages)
     total_team2_score = len(team2_advantages)
     
-    # Добавляем веса для HLTV (более важный показатель)
-    if abs(hltv_diff) > 0.2:
-        if hltv_diff > 0:
+    # Добавляем веса для рейтинга игроков (более важный показатель)
+    if abs(rating_diff) > 0.2:
+        if rating_diff > 0:
             total_team1_score += 2
         else:
             total_team2_score += 2
@@ -454,14 +454,14 @@ def generate_match_prediction(team1_strength: Dict, team2_strength: Dict,
     return {
         'favorite': favorite,
         'confidence': confidence,
-        'hltv_difference': hltv_diff,
+        'rating_difference': rating_diff,
         'elo_difference': elo_diff,
         'map_favorite': map_favorite,
         'team1_advantages': team1_advantages,
         'team2_advantages': team2_advantages,
         'analysis_factors': {
             'strong_players_diff': strong_diff,
-            'avg_hltv_diff': hltv_diff,
+            'avg_rating_diff': rating_diff,
             'avg_elo_diff': elo_diff,
             'map_winrate_diff': map_analysis.get('winrate_diff', 0) if map_analysis else 0
         }
@@ -507,7 +507,7 @@ def format_match_analysis(analysis: Dict[str, Any]) -> str:
     # Команда 1
     team1_strength = team1_data.get('strength', {})
     text += f"👥 **{team1_name}**\n"
-    text += f"├ Средний HLTV: **{team1_strength.get('avg_hltv', 0):.3f}**\n"
+    text += f"├ Средний рейтинг: **{team1_strength.get('avg_rating', 0):.3f}**\n"
     text += f"├ Средний ELO: **{team1_strength.get('avg_elo', 0)}**\n"
     text += f"├ Средний уровень: **{team1_strength.get('avg_level', 0)}**\n"
     
@@ -515,13 +515,13 @@ def format_match_analysis(analysis: Dict[str, Any]) -> str:
     if strong1:
         text += f"├ Сильные игроки ({len(strong1)}):\n"
         for player in strong1:
-            text += f"│  • {player['nickname']} (HLTV: {player['hltv']:.3f})\n"
+            text += f"│  • {player['nickname']} (Рейтинг: {player['rating']:.3f})\n"
     
     weak1 = team1_strength.get('weak_players', [])
     if weak1:
         text += f"└ Слабые игроки ({len(weak1)}):\n"
         for player in weak1:
-            text += f"   • {player['nickname']} (HLTV: {player['hltv']:.3f})\n"
+            text += f"   • {player['nickname']} (Рейтинг: {player['rating']:.3f})\n"
     else:
         text += f"└ Слабых игроков не выявлено\n"
     
@@ -530,7 +530,7 @@ def format_match_analysis(analysis: Dict[str, Any]) -> str:
     # Команда 2
     team2_strength = team2_data.get('strength', {})
     text += f"👥 **{team2_name}**\n"
-    text += f"├ Средний HLTV: **{team2_strength.get('avg_hltv', 0):.3f}**\n"
+    text += f"├ Средний рейтинг: **{team2_strength.get('avg_rating', 0):.3f}**\n"
     text += f"├ Средний ELO: **{team2_strength.get('avg_elo', 0)}**\n"
     text += f"├ Средний уровень: **{team2_strength.get('avg_level', 0)}**\n"
     
@@ -538,13 +538,13 @@ def format_match_analysis(analysis: Dict[str, Any]) -> str:
     if strong2:
         text += f"├ Сильные игроки ({len(strong2)}):\n"
         for player in strong2:
-            text += f"│  • {player['nickname']} (HLTV: {player['hltv']:.3f})\n"
+            text += f"│  • {player['nickname']} (Рейтинг: {player['rating']:.3f})\n"
     
     weak2 = team2_strength.get('weak_players', [])
     if weak2:
         text += f"└ Слабые игроки ({len(weak2)}):\n"
         for player in weak2:
-            text += f"   • {player['nickname']} (HLTV: {player['hltv']:.3f})\n"
+            text += f"   • {player['nickname']} (Рейтинг: {player['rating']:.3f})\n"
     else:
         text += f"└ Слабых игроков не выявлено\n"
     
@@ -607,33 +607,13 @@ def format_match_analysis(analysis: Dict[str, Any]) -> str:
 
 @router.callback_query(F.data == "current_match_analysis")
 async def show_current_match_menu(callback: CallbackQuery, state: FSMContext):
-    """Показать меню анализа текущего матча"""
-    # Проверяем, есть ли сохраненный анализ
-    user_id = callback.from_user.id
-    saved_analysis = await storage.get_cached_data(f"current_match_analysis_{user_id}")
+    """Показать заглушку для анализа текущего матча"""
+    text = "🔍 **Анализ текущего матча**\n\n"
+    text += "🚧 **Раздел в разработке**\n\n"
+    text += "Данная функция находится в процессе разработки и будет доступна в ближайшее время.\n\n"
+    text += "Пока вы можете использовать другие функции бота."
     
-    if saved_analysis:
-        text = "🔍 **Анализ текущего матча**\n\n"
-        text += "У вас есть сохраненный анализ матча.\n"
-        text += "Выберите действие:"
-        
-        builder = InlineKeyboardBuilder()
-        builder.button(text="📊 Показать анализ", callback_data="show_saved_analysis")
-        builder.button(text="🔗 Новый анализ", callback_data="enter_match_link")
-        builder.button(text="🔙 Назад", callback_data="back_to_main")
-        keyboard = builder.as_markup()
-    else:
-        text = "🔍 **Анализ текущего матча**\n\n"
-        text += "Введите ссылку на матч FACEIT для получения детального анализа команд и прогноза.\n\n"
-        text += "📊 **Что анализируется:**\n"
-        text += "• Сила команд (средний HLTV, ELO)\n"
-        text += "• Сильные и слабые игроки\n"
-        text += "• Статистика команд на карте\n"
-        text += "• Прогноз победителя\n\n"
-        text += "Выберите действие:"
-        keyboard = get_current_match_keyboard()
-    
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
+    await callback.message.edit_text(text, parse_mode="Markdown")
     await callback.answer()
 
 
@@ -782,19 +762,19 @@ async def detailed_team_analysis(callback: CallbackQuery):
         strength = team_data.get('strength', {})
         
         text += f"📈 **Общие показатели:**\n"
-        text += f"• Средний HLTV: **{strength.get('avg_hltv', 0):.3f}**\n"
+        text += f"• Средний рейтинг: **{strength.get('avg_rating', 0):.3f}**\n"
         text += f"• Средний ELO: **{strength.get('avg_elo', 0)}**\n"
         text += f"• Средний уровень: **{strength.get('avg_level', 0)}**\n"
         text += f"• Общий винрейт: **{strength.get('avg_winrate', 0):.1f}%**\n\n"
         
         text += f"👥 **Игроки команды:**\n"
         
-        # Сортируем игроков по HLTV рейтингу
+        # Сортируем игроков по рейтингу
         sorted_players = sorted(players, key=lambda p: p.get('hltv_rating', 0), reverse=True)
         
         for i, player in enumerate(sorted_players, 1):
             nickname = player.get('nickname', 'Unknown')
-            hltv = player.get('hltv_rating', 0)
+            player_rating = player.get('hltv_rating', 0)
             elo = player.get('elo', 0)
             level = player.get('level', 0)
             winrate = player.get('winrate', 0)
@@ -802,17 +782,17 @@ async def detailed_team_analysis(callback: CallbackQuery):
             adr = player.get('adr', 0)
             
             # Определяем категорию игрока
-            if hltv >= 1.1:
+            if player_rating >= 1.1:
                 category = "🔥"
-            elif hltv >= 1.0:
+            elif player_rating >= 1.0:
                 category = "⭐"
-            elif hltv >= 0.9:
+            elif player_rating >= 0.9:
                 category = "✅"
             else:
                 category = "⚠️"
             
             text += f"{category} **{nickname}**\n"
-            text += f"   HLTV: {hltv:.3f} | K/D: {kd:.2f} | ADR: {adr:.1f}\n"
+            text += f"   Рейтинг: {player_rating:.3f} | K/D: {kd:.2f} | ADR: {adr:.1f}\n"
             text += f"   ELO: {elo} | LVL: {level} | WR: {winrate:.1f}%\n\n"
         
         text += "═" * 30 + "\n\n"
@@ -823,15 +803,15 @@ async def detailed_team_analysis(callback: CallbackQuery):
     team1_strength = team1_data.get('strength', {})
     team2_strength = team2_data.get('strength', {})
     
-    hltv_diff = team1_strength.get('avg_hltv', 0) - team2_strength.get('avg_hltv', 0)
+    rating_diff = team1_strength.get('avg_rating', 0) - team2_strength.get('avg_rating', 0)
     elo_diff = team1_strength.get('avg_elo', 0) - team2_strength.get('avg_elo', 0)
     
-    if hltv_diff > 0:
-        text += f"📈 **{team1_name}** сильнее по HLTV на **{hltv_diff:.3f}**\n"
-    elif hltv_diff < 0:
-        text += f"📈 **{team2_name}** сильнее по HLTV на **{abs(hltv_diff):.3f}**\n"
+    if rating_diff > 0:
+        text += f"📈 **{team1_name}** сильнее по рейтингу на **{rating_diff:.3f}**\n"
+    elif rating_diff < 0:
+        text += f"📈 **{team2_name}** сильнее по рейтингу на **{abs(rating_diff):.3f}**\n"
     else:
-        text += f"⚖️ Команды равны по среднему HLTV\n"
+        text += f"⚖️ Команды равны по среднему рейтингу\n"
     
     if abs(elo_diff) > 10:
         if elo_diff > 0:
@@ -908,7 +888,7 @@ async def detailed_map_analysis(callback: CallbackQuery):
     if best1:
         text += f"🌟 **Лучший игрок:** {best1['nickname']}\n"
         text += f"   Винрейт: {best1['winrate']:.1f}% ({best1['matches']} матчей)\n"
-        text += f"   HLTV на карте: {best1.get('hltv', 0):.3f}\n\n"
+        text += f"   Рейтинг на карте: {best1.get('rating', 0):.3f}\n\n"
     
     # Анализ второй команды на карте
     text += f"📊 **{team2_name} на {map_name}:**\n"
@@ -932,7 +912,7 @@ async def detailed_map_analysis(callback: CallbackQuery):
     if best2:
         text += f"🌟 **Лучший игрок:** {best2['nickname']}\n"
         text += f"   Винрейт: {best2['winrate']:.1f}% ({best2['matches']} матчей)\n"
-        text += f"   HLTV на карте: {best2.get('hltv', 0):.3f}\n\n"
+        text += f"   Рейтинг на карте: {best2.get('rating', 0):.3f}\n\n"
     
     # Сравнительный анализ
     text += "⚔️ **СРАВНЕНИЕ НА КАРТЕ**\n\n"
@@ -961,7 +941,7 @@ async def detailed_map_analysis(callback: CallbackQuery):
         performances = team_perf.get('all_performances', [])
         if performances:
             text += f"🏆 **{team_name}** - топ на карте:\n"
-            sorted_perfs = sorted(performances, key=lambda x: (x['winrate'], x['hltv']), reverse=True)
+            sorted_perfs = sorted(performances, key=lambda x: (x['winrate'], x['rating']), reverse=True)
             for i, perf in enumerate(sorted_perfs[:3], 1):
                 text += f"{i}. {perf['nickname']}: {perf['winrate']:.1f}% ({perf['matches']}м)\n"
             text += "\n"
