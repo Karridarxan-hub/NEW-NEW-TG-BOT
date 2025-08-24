@@ -38,10 +38,73 @@ class DatabaseStorage:
             await self.redis.ping()
             logger.info("✅ Подключение к Redis установлено")
             
+            # Создание необходимых таблиц
+            await self._create_tables()
+            logger.info("✅ Таблицы базы данных проверены/созданы")
+            
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к базам данных: {e}")
             raise
     
+    async def _create_tables(self):
+        """Создание необходимых таблиц при первом запуске"""
+        try:
+            # Таблица для кэша FACEIT API
+            await self.postgres.execute("""
+                CREATE TABLE IF NOT EXISTS faceit_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    data JSONB NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_faceit_cache_expires_at ON faceit_cache(expires_at);
+            """)
+            
+            # Таблица для пользователей
+            await self.postgres.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id BIGINT PRIMARY KEY,
+                    faceit_id TEXT UNIQUE NOT NULL,
+                    nickname TEXT NOT NULL,
+                    last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_users_faceit_id ON users(faceit_id);
+            """)
+            
+            # Таблица для сессий пользователей
+            await self.postgres.execute("""
+                CREATE TABLE IF NOT EXISTS user_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    data JSONB NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+                CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+            """)
+            
+            # Таблица для уведомлений  
+            await self.postgres.execute("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    notification_type TEXT NOT NULL,
+                    data JSONB NOT NULL,
+                    sent BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+                CREATE INDEX IF NOT EXISTS idx_notifications_sent ON notifications(sent);
+            """)
+            
+            logger.info("✅ Схема базы данных готова (4 таблицы)")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания таблиц: {e}")
+            raise
+
     async def disconnect(self):
         """Закрытие подключений"""
         if self.postgres:

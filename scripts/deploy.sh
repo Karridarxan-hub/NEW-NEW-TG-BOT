@@ -165,31 +165,58 @@ start_services() {
 health_check() {
     log "🏥 Проверка состояния сервисов..."
     
-    # Ждем запуска
-    sleep 30
+    # Ждем запуска (увеличиваем начальное ожидание)
+    sleep 45
     
     # Проверка Docker контейнеров
     if ! docker-compose ps | grep -q "Up"; then
         error "Контейнеры не запустились"
     fi
     
-    # Проверка HTTP endpoint
-    MAX_ATTEMPTS=12  # 2 минуты
+    # Проверка HTTP endpoint с улучшенной диагностикой
+    MAX_ATTEMPTS=20  # 3.5 минуты (20 * 10 сек)
     ATTEMPT=1
     
     while [[ $ATTEMPT -le $MAX_ATTEMPTS ]]; do
         info "Попытка $ATTEMPT/$MAX_ATTEMPTS: проверка /health endpoint..."
         
-        if curl -f -s http://localhost:8000/health > /dev/null; then
-            log "✅ Сервис готов к работе"
-            return 0
+        # Более детальная проверка с показом ответа
+        local health_response
+        health_response=$(curl -s -w "HTTP_CODE:%{http_code}" http://localhost:8000/health 2>/dev/null || echo "CURL_ERROR")
+        
+        if [[ "$health_response" == *"HTTP_CODE:200"* ]]; then
+            log "✅ Сервис готов к работе (HTTP 200 OK)"
+            
+            # Дополнительная проверка - убедимся что бот действительно работает
+            info "🔄 Проверка работы Telegram бота..."
+            sleep 5
+            
+            # Проверяем логи на наличие "Run polling"
+            if docker-compose logs faceit-bot 2>/dev/null | grep -q "Run polling"; then
+                log "✅ Telegram бот успешно запущен"
+                return 0
+            else
+                warn "⚠️ Health endpoint отвечает, но бот еще инициализируется..."
+            fi
+            
+        elif [[ "$health_response" == *"HTTP_CODE:"* ]]; then
+            local http_code
+            http_code=$(echo "$health_response" | grep -o 'HTTP_CODE:[0-9]*' | cut -d: -f2)
+            warn "⚠️ Health endpoint вернул код $http_code"
+            
+        else
+            warn "⚠️ Не удается подключиться к health endpoint"
         fi
         
         sleep 10
         ((ATTEMPT++))
     done
     
-    error "Сервис не отвечает на health check"
+    # Показываем логи для диагностики перед ошибкой
+    warn "🔍 Последние логи для диагностики:"
+    docker-compose logs --tail=20 faceit-bot
+    
+    error "Сервис не отвечает на health check после $MAX_ATTEMPTS попыток"
 }
 
 # Показ статуса
