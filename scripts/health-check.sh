@@ -6,7 +6,7 @@
 set -e
 
 # Конфигурация
-API_BASE_URL="${API_BASE_URL:-http://localhost:8080}"
+API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
 TIMEOUT=10
 PROJECT_NAME="faceit-cs2-bot"
 
@@ -284,13 +284,13 @@ check_ports() {
     if [[ "$DETAILED" == "true" ]] && command -v netstat &> /dev/null; then
         log_info "Проверка портов..."
         
-        # Проверка порта 8080 (FastAPI - внешний порт)
-        if netstat -tlpn 2>/dev/null | grep -q ":8080 "; then
-            results["port_8080"]="open"
-            log_success "Порт 8080 открыт (FastAPI)"
+        # Проверка порта 8000 (FastAPI - внешний порт)
+        if netstat -tlpn 2>/dev/null | grep -q ":8000 "; then
+            results["port_8000"]="open"
+            log_success "Порт 8000 открыт (FastAPI)"
         else
-            results["port_8080"]="closed"
-            log_warning "Порт 8080 закрыт"
+            results["port_8000"]="closed"
+            log_warning "Порт 8000 закрыт"
         fi
         
         # Проверка порта 6380 (Redis внешний порт)
