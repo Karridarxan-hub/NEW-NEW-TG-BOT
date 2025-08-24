@@ -10,14 +10,13 @@ services:
     container_name: faceit_cs2_bot
     restart: unless-stopped
     
-    # Переменные окружения
+    # Переменные окружения (Docker-специфичные)
     environment:
-      - DEBUG=false
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=postgresql://faceit_user:faceit_password@postgres:5432/faceit_bot
       - REDIS_URL=redis://redis:6379/0
     
-    # Файл с переменными окружения
+    # Файл с переменными окружения (.env для локальной разработки)
     env_file:
       - .env
     
