@@ -192,13 +192,15 @@ def get_help_keyboard() -> InlineKeyboardMarkup:
     """Меню помощи"""
     builder = InlineKeyboardBuilder()
     
+    builder.button(text="🚀 Быстрый старт", callback_data="help_quick_start")
+    builder.button(text="❓ FAQ", callback_data="help_faq")
     builder.button(text="📖 Описание бота", callback_data="help_description")
     builder.button(text="📖 Описание функций", callback_data="help_functions")
     builder.button(text="💬 Связаться с разработчиком", callback_data="help_contact")
     builder.button(text="🔙 Назад", callback_data="back_to_main")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
     
-    builder.adjust(2, 1, 2)
+    builder.adjust(2, 2, 1, 2)
     return builder.as_markup()
 
 
