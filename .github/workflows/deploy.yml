@@ -1,0 +1,168 @@
+name: 🚀 Production Deploy
+
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  PROJECT_NAME: faceit-cs2-bot
+  DEPLOY_PATH: /opt/faceit-bot
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to VPS
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📋 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 🔍 Get commit info
+      id: commit
+      run: |
+        echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        echo "message=$(git log -1 --pretty=%B | head -1)" >> $GITHUB_OUTPUT
+        echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+
+    - name: 🖥️ Deploy to VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_PORT }}
+        script_stop: true
+        script: |
+          echo "🚀 Starting deployment..."
+          echo "📦 Commit: ${{ steps.commit.outputs.sha }}"
+          echo "💬 Message: ${{ steps.commit.outputs.message }}"
+          echo "👤 Author: ${{ steps.commit.outputs.author }}"
+          
+          # Переход в директорию проекта
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # Остановка старой версии
+          echo "🛑 Stopping current services..."
+          docker-compose down --remove-orphans || true
+          
+          # Получение последних изменений
+          echo "⬇️ Pulling latest changes..."
+          git fetch --all --tags --prune
+          git checkout master
+          git reset --hard origin/master
+          
+          # Проверка версии
+          CURRENT_VERSION=$(grep -o 'version="[^"]*"' main.py | cut -d'"' -f2)
+          echo "📊 Current version: $CURRENT_VERSION"
+          
+          # Резервная копия
+          echo "💾 Creating backup..."
+          BACKUP_NAME="backup_$(date +%Y%m%d_%H%M%S)"
+          mkdir -p /opt/backups
+          tar -czf "/opt/backups/${BACKUP_NAME}.tar.gz" \
+            --exclude='logs' --exclude='data' --exclude='.git' \
+            --exclude='__pycache__' . || echo "⚠️ Backup creation failed"
+          
+          # Копирование production конфига
+          echo "⚙️ Setting up production config..."
+          if [ -f .env.production ]; then
+            cp .env.production .env
+            echo "✅ Production config applied"
+          else
+            echo "❌ Production config not found!"
+            exit 1
+          fi
+          
+          # Очистка Docker кэша
+          echo "🧹 Cleaning Docker cache..."
+          docker system prune -f || true
+          
+          # Сборка и запуск
+          echo "🔨 Building and starting services..."
+          chmod +x scripts/deploy.sh
+          ./scripts/deploy.sh prod --rebuild
+          
+          # Проверка статуса
+          echo "🏥 Checking service health..."
+          sleep 30
+          
+          if docker-compose ps | grep -q "Up.*healthy"; then
+            echo "✅ Services are running and healthy"
+            
+            # Проверка API
+            if curl -f -s http://localhost:8000/health > /dev/null; then
+              echo "✅ API health check passed"
+              
+              # Проверка воркеров в логах
+              WORKER_COUNT=$(docker-compose logs faceit-bot 2>/dev/null | grep -c "воркер" || echo "0")
+              echo "🔧 Workers detected: $WORKER_COUNT"
+              
+              echo "🎉 Deployment successful!"
+              
+              # Статистика
+              echo "📊 Deployment statistics:"
+              docker-compose ps
+              docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+              
+            else
+              echo "❌ API health check failed"
+              docker-compose logs faceit-bot
+              exit 1
+            fi
+          else
+            echo "❌ Services failed to start properly"
+            docker-compose ps
+            docker-compose logs
+            exit 1
+          fi
+
+    - name: 📱 Notify success
+      if: success()
+      run: |
+        echo "✅ Deployment completed successfully!"
+        echo "🎯 Version: $(grep -o 'version=\"[^\"]*\"' main.py | cut -d'\"' -f2)"
+        echo "🔗 Commit: ${{ steps.commit.outputs.sha }}"
+
+    - name: 📱 Notify failure  
+      if: failure()
+      run: |
+        echo "❌ Deployment failed!"
+        echo "🔗 Commit: ${{ steps.commit.outputs.sha }}"
+        echo "💬 Message: ${{ steps.commit.outputs.message }}"
+
+    - name: 🔄 Rollback on failure
+      if: failure()
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_PORT }}
+        script: |
+          echo "🔄 Starting rollback process..."
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # Попытка восстановления из последнего бэкапа
+          LAST_BACKUP=$(ls -t /opt/backups/backup_*.tar.gz 2>/dev/null | head -1)
+          if [ -n "$LAST_BACKUP" ]; then
+            echo "📦 Found backup: $LAST_BACKUP"
+            echo "🔄 Rolling back to previous version..."
+            
+            # Остановка текущих сервисов
+            docker-compose down --remove-orphans || true
+            
+            # Восстановление из бэкапа
+            tar -xzf "$LAST_BACKUP" -C . || echo "⚠️ Backup extraction failed"
+            
+            # Запуск восстановленной версии
+            docker-compose up -d || echo "⚠️ Rollback startup failed"
+            
+            echo "🔄 Rollback completed"
+          else
+            echo "❌ No backup found for rollback"
+          fi

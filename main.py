@@ -145,7 +145,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="FACEIT CS2 Bot API",
     description="API для получения статистики игроков CS2 с FACEIT",
-    version="2.1.2",
+    version="2.1.3",
     lifespan=lifespan
 )
 
