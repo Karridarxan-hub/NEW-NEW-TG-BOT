@@ -5,7 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from typing import List, Dict, Any, Optional
 import logging
 
-from keyboards import get_match_history_keyboard, get_back_to_main_keyboard
+from keyboards import get_history_reply_keyboard, get_main_reply_keyboard
 from storage import storage
 from faceit_client import faceit_client
 
@@ -17,18 +17,27 @@ logger = logging.getLogger(__name__)
 
 # FSM состояния для истории матчей
 class NewMatchHistoryStates(StatesGroup):
-    waiting_for_custom_count = State()
+    waiting_for_custom_count = State()  # Восстанавливаем состояние для кастомного ввода
 
 # Обработчик главного меню истории матчей
 @router.callback_query(F.data == "match_history")
 async def show_match_history_menu(callback: CallbackQuery, state: FSMContext):
     """Показать меню истории матчей"""
+    logger.info(f"🔍 Вызов меню истории матчей от пользователя {callback.from_user.id}")
     await state.clear()
     
-    await callback.message.edit_text(
+    keyboard = get_history_reply_keyboard()
+    logger.info(f"🔍 Создана клавиатура с {len(keyboard.inline_keyboard)} рядами кнопок")
+    
+    # Логируем все кнопки для отладки
+    for i, row in enumerate(keyboard.inline_keyboard):
+        for j, button in enumerate(row):
+            logger.info(f"🔍 Кнопка [{i}][{j}]: '{button.text}' -> {button.callback_data}")
+    
+    await callback.message.answer(
         "📝 <b>История матчей</b>\n\n"
         "Выберите количество матчей для просмотра:",
-        reply_markup=get_match_history_keyboard(),
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
     await callback.answer()
@@ -44,44 +53,23 @@ async def show_match_history(callback: CallbackQuery, state: FSMContext):
     
     await process_match_history_request(callback, match_count)
 
-# Обработчик для ввода пользовательского количества матчей
+# Обработчик для кнопки кастомного ввода
 @router.callback_query(F.data == "history_custom")
-async def ask_custom_match_count(callback: CallbackQuery, state: FSMContext):
-    """Запросить пользовательское количество матчей"""
+async def ask_custom_history_count(callback: CallbackQuery, state: FSMContext):
+    """Запросить у пользователя кастомное количество матчей"""
+    logger.info(f"🎯 Пользователь {callback.from_user.id} нажал 'Ввести число' (Inline callback) в new_match_history_handler")
+    await state.clear()
     await state.set_state(NewMatchHistoryStates.waiting_for_custom_count)
     
-    await callback.message.edit_text(
+    await callback.message.answer(
         "✏️ <b>Ввод количества матчей</b>\n\n"
-        "Введите количество матчей для просмотра (от 1 до 100):",
-        reply_markup=get_back_to_main_keyboard(),
+        "Введите количество матчей для просмотра (от 1 до 100):\n\n"
+        "💡 <i>Например: 15</i>",
         parse_mode="HTML"
     )
     await callback.answer()
 
-# Обработчик ввода пользовательского количества
-@router.message(NewMatchHistoryStates.waiting_for_custom_count)
-async def process_custom_match_count(message: Message, state: FSMContext):
-    """Обработать введенное количество матчей"""
-    try:
-        match_count = int(message.text.strip())
-        
-        if not 1 <= match_count <= 100:
-            await message.answer(
-                "❌ Количество матчей должно быть от 1 до 100.\n"
-                "Попробуйте еще раз:"
-            )
-            return
-        
-        await state.clear()
-        
-        # Создаем псевдо-callback для обработки
-        await process_match_history_request_from_message(message, match_count)
-        
-    except ValueError:
-        await message.answer(
-            "❌ Введите корректное число от 1 до 100.\n"
-            "Попробуйте еще раз:"
-        )
+
 
 async def process_match_history_request(callback: CallbackQuery, match_count: int):
     """Обработать запрос истории матчей через callback"""
@@ -89,7 +77,7 @@ async def process_match_history_request(callback: CallbackQuery, match_count: in
     faceit_id = await storage.get_user_faceit_id(user_id)
     
     if not faceit_id:
-        await callback.message.edit_text(
+        await callback.message.answer(
             "❌ Профиль FACEIT не привязан!\n"
             "Используйте /start для привязки профиля.",
             reply_markup=get_back_to_main_keyboard()
@@ -97,7 +85,7 @@ async def process_match_history_request(callback: CallbackQuery, match_count: in
         await callback.answer()
         return
 
-    await callback.message.edit_text(
+    await callback.message.answer(
         f"🔄 Загружаю последние {match_count} матчей...",
         reply_markup=None
     )
@@ -113,10 +101,10 @@ async def process_match_history_request(callback: CallbackQuery, match_count: in
         
         if not history_data or not history_data.get("items"):
             logger.warning(f"История матчей пуста для игрока {faceit_id}")
-            await callback.message.edit_text(
+            await callback.message.answer(
                 "📭 История матчей пуста.\n"
                 "Возможно, у игрока нет матчей в CS2 или данные еще не обновились.",
-                reply_markup=get_match_history_keyboard()
+                reply_markup=get_history_reply_keyboard()
             )
             await callback.answer()
             return
@@ -127,7 +115,7 @@ async def process_match_history_request(callback: CallbackQuery, match_count: in
         # Формируем сообщение с историей в новом формате
         message_text = await format_new_match_history(matches, faceit_id, match_count)
         
-        await callback.message.edit_text(
+        await callback.message.answer(
             message_text,
             reply_markup=None,
             parse_mode="HTML",
@@ -136,9 +124,9 @@ async def process_match_history_request(callback: CallbackQuery, match_count: in
         
     except Exception as e:
         logger.error(f"Ошибка при получении истории матчей: {e}")
-        await callback.message.edit_text(
+        await callback.message.answer(
             "❌ Произошла ошибка при загрузке истории матчей.",
-            reply_markup=get_match_history_keyboard()
+            reply_markup=get_history_reply_keyboard()
         )
     
     await callback.answer()
@@ -168,7 +156,7 @@ async def process_match_history_request_from_message(message: Message, match_cou
             await loading_msg.edit_text(
                 "📭 История матчей пуста.\n"
                 "Возможно, у игрока нет матчей в CS2 или данные еще не обновились.",
-                reply_markup=get_match_history_keyboard()
+                reply_markup=get_history_reply_keyboard()
             )
             return
 
@@ -188,7 +176,7 @@ async def process_match_history_request_from_message(message: Message, match_cou
         logger.error(f"Ошибка при получении истории матчей: {e}")
         await loading_msg.edit_text(
             "❌ Произошла ошибка при загрузке истории матчей.",
-            reply_markup=get_match_history_keyboard()
+            reply_markup=get_history_reply_keyboard()
         )
 
 async def format_new_match_history(matches: List[Dict[str, Any]], player_faceit_id: str, match_count: int) -> str:
@@ -381,13 +369,61 @@ async def handle_history_30_reply(message: Message, state: FSMContext):
     logger.info(f"Обрабатываем reply '30 матчей' от пользователя {message.from_user.id}")
     await process_match_history_request_from_message(message, 30)
 
+# Reply-обработчик для кастомного ввода
+@router.message(F.text == "✏️ Ввести число")
+async def handle_custom_history_input_reply(message: Message, state: FSMContext):
+    """Reply-обработчик кастомного ввода истории матчей"""
+    logger.info(f"🎯 Пользователь {message.from_user.id} нажал 'Ввести число' (Reply) в new_match_history_handler")
+    
+    await state.clear()
+    await state.set_state(NewMatchHistoryStates.waiting_for_custom_count)
+    
+    await message.answer(
+        "✏️ <b>Ввод количества матчей</b>\n\n"
+        "Введите количество матчей для просмотра (от 1 до 100):\n\n"
+        "💡 <i>Например: 15</i>",
+        parse_mode="HTML"
+    )
+
+# FSM обработчик для кастомного ввода количества матчей
+@router.message(NewMatchHistoryStates.waiting_for_custom_count)
+async def process_custom_history_count(message: Message, state: FSMContext):
+    """Обработать введенное пользователем количество матчей"""
+    user_text = message.text.strip()
+    
+    try:
+        match_count = int(user_text)
+        
+        # Валидация диапазона
+        if match_count < 1 or match_count > 100:
+            await message.answer(
+                "❌ <b>Некорректное число</b>\n\n"
+                "Количество матчей должно быть от 1 до 100.\n"
+                "Попробуйте еще раз:",
+                parse_mode="HTML"
+            )
+            return
+        
+        # Очищаем состояние и выполняем запрос
+        await state.clear()
+        await process_match_history_request_from_message(message, match_count)
+        
+    except ValueError:
+        await message.answer(
+            "❌ <b>Некорректный ввод</b>\n\n"
+            "Пожалуйста, введите число от 1 до 100.\n\n"
+            "💡 <i>Например: 15</i>",
+            parse_mode="HTML"
+        )
+
+
 # Обработчик возврата назад в главное меню
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_menu(callback: CallbackQuery, state: FSMContext):
     """Вернуться в главное меню"""
     await state.clear()
     from keyboards import get_main_menu_keyboard
-    await callback.message.edit_text(
+    await callback.message.answer(
         "🏠 <b>Главное меню</b>\n\n"
         "Выберите раздел:",
         reply_markup=get_main_menu_keyboard(),

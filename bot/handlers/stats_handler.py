@@ -103,7 +103,6 @@ async def show_overall_stats(callback: CallbackQuery):
 💥 **Урон:**
 • **ADR:** {formatted_stats.get('adr', 0):.1f}
 
-_Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}_
 """
         
         # Отправляем статистику

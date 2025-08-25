@@ -338,6 +338,12 @@ docker exec faceit_redis redis-cli SAVE
 - ✅ Fixed profile management and display
 - ✅ Added current match analysis placeholder
 
+### v2.1.4
+- ✅ Removed timestamp lines from all statistics displays
+- ✅ Updated bot description for better clarity
+- ✅ Enhanced clutch statistics format with absolute numbers
+- ✅ Improved user interface cleanliness
+
 ### v2.1.0
 - ✅ Complete player comparison system overhaul
 - ✅ FSM-based conversation flow

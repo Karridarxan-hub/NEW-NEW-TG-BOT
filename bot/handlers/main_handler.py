@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.filters import CommandStart, StateFilter
+from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -23,6 +23,31 @@ logger = logging.getLogger(__name__)
 # FSM состояния для основных действий
 class MainStates(StatesGroup):
     waiting_for_nickname = State()
+
+# Обработчик команды /refresh_menu для принудительной очистки состояния
+@router.message(Command("refresh_menu"))
+async def refresh_menu_command(message: Message, state: FSMContext):
+    """Принудительная очистка FSM состояния и показ главного меню"""
+    await state.clear()
+    logger.info(f"FSM состояние очищено для пользователя {message.from_user.id}")
+    
+    user_id = message.from_user.id
+    faceit_id = await storage.get_user_faceit_id(user_id)
+    
+    if faceit_id:
+        user_data = await storage.get_user(user_id)
+        await message.answer(
+            f"🔄 Меню обновлено!\n\n"
+            f"🎮 Игрок: {user_data.get('nickname', 'Игрок')}\n\n"
+            f"Используйте кнопки ниже для навигации:",
+            reply_markup=get_main_reply_keyboard()
+        )
+    else:
+        await message.answer(
+            "🔄 Меню обновлено!\n\n"
+            "Для начала работы введите ваш никнейм на FACEIT:"
+        )
+        await state.set_state(MainStates.waiting_for_nickname)
 
 # Обработчик команды /start
 @router.message(CommandStart())
@@ -103,7 +128,7 @@ async def back_to_main_menu(callback: CallbackQuery):
     await callback.message.edit_text(
         f"🎮 Главное меню\n\n"
         f"Выберите нужный раздел:",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_reply_keyboard()
     )
     await callback.answer()
 
@@ -115,12 +140,11 @@ async def back_to_main_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "form_analysis")
 async def show_form_analysis_menu(callback: CallbackQuery):
     """Показать меню анализа формы"""
-    from keyboards import get_form_analysis_keyboard
-    await callback.message.edit_text(
+    await callback.message.answer(
         "📈 **Анализ формы**\n\n"
         "Выберите период для сравнительного анализа:",
         parse_mode="Markdown", 
-        reply_markup=get_form_analysis_keyboard()
+        reply_markup=get_form_reply_keyboard()
     )
     await callback.answer()
 
@@ -145,12 +169,11 @@ async def show_player_comparison_menu(callback: CallbackQuery, state: FSMContext
 @router.callback_query(F.data == "current_match_analysis")
 async def show_current_match_analysis_menu(callback: CallbackQuery):
     """Показать меню анализа текущего матча"""
-    from keyboards import get_current_match_analysis_keyboard
-    await callback.message.edit_text(
+    await callback.message.answer(
         "🔍 **Анализ текущего матча**\n\n"
         "Введите ссылку на матч FACEIT для подробного анализа команд и прогноза.",
         parse_mode="Markdown",
-        reply_markup=get_current_match_analysis_keyboard()
+        reply_markup=get_main_reply_keyboard()
     )
     await callback.answer()
 
@@ -158,13 +181,12 @@ async def show_current_match_analysis_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "help")
 async def show_help(callback: CallbackQuery):
     """Показать справку"""
-    from keyboards import get_help_keyboard
-    await callback.message.edit_text(
+    await callback.message.answer(
         "❓ **Помощь по боту**\n\n"
-        "🎮 **FACEIT CS2 Статистика Бот** - ваш персональный помощник для анализа статистики в CS2.\n\n"
+        "Твой персональный помощник для анализа матчей в CS2 на Faceit.\n\n"
         "Выберите интересующий раздел:",
         parse_mode="Markdown",
-        reply_markup=get_help_keyboard()
+        reply_markup=get_help_reply_keyboard()
     )
     await callback.answer()
 
@@ -438,7 +460,7 @@ async def handle_help_button(message: Message):
     """Обработчик кнопки 'Помощь'"""
     await message.answer(
         "❓ **Помощь по боту**\n\n"
-        "🎮 **FACEIT CS2 Статистика Бот** - ваш персональный помощник для анализа статистики в CS2.\n\n"
+        "Твой персональный помощник для анализа матчей в CS2 на Faceit.\n\n"
         "Выберите интересующий раздел:",
         parse_mode="Markdown",
         reply_markup=get_help_reply_keyboard()
@@ -553,8 +575,8 @@ async def handle_overall_stats_reply(message: Message):
 • **Мульти-килл за матч (3+):** {formatted_stats.get('multi_kills_per_match', 0):.1f}
 
 🏆 **Клатчи:**
-• **1v1:** {formatted_stats.get('clutch_1v1_total', 0)} ({formatted_stats.get('clutch_1v1_percentage', 0):.0f}% побед)
-• **1v2:** {formatted_stats.get('clutch_1v2_total', 0)} ({formatted_stats.get('clutch_1v2_percentage', 0):.0f}% побед)
+• **1v1:** {formatted_stats.get('clutch_1v1_total', 0)} ({formatted_stats.get('clutch_1v1_wins', 0)} побед, {formatted_stats.get('clutch_1v1_percentage', 0):.0f}%)
+• **1v2:** {formatted_stats.get('clutch_1v2_total', 0)} ({formatted_stats.get('clutch_1v2_wins', 0)} побед, {formatted_stats.get('clutch_1v2_percentage', 0):.0f}%)
 
 🎯 **Первые действия за матч:**
 • **Первые убийства:** {formatted_stats.get('first_kills', 0)}
@@ -562,7 +584,7 @@ async def handle_overall_stats_reply(message: Message):
 • **Попыток энтри:** {formatted_stats.get('total_entry_attempts', 0)}
 • **% успешных энтри:** {formatted_stats.get('entry_success_percentage', 0):.1f}%
 
-_Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}_"""
+"""
         
         # Отправляем статистику
         await loading_msg.edit_text(
@@ -869,6 +891,8 @@ async def handle_form_50_reply(message: Message):
     # Используем общий FakeCallback класс с данными
     fake_callback = FakeCallback(message, "form_50")
     await analyze_form_fixed(fake_callback, state)
+
+# Обработчики кастомного ввода удалены - теперь в специализированных хендлерах
 
 # Обработчики для сравнения игроков
 
@@ -1314,6 +1338,40 @@ async def handle_contact_reply(message: Message):
         parse_mode="Markdown",
         reply_markup=get_help_reply_keyboard()
     )
+
+# Команда для обновления интерфейса
+@router.message(Command("refresh"))
+async def refresh_interface(message: Message, state: FSMContext):
+    """Обновить интерфейс бота (новые клавиатуры)"""
+    await state.clear()
+    user_id = message.from_user.id
+    
+    # Проверяем привязан ли FACEIT
+    faceit_id = await storage.get_user_faceit_id(user_id)
+    
+    if faceit_id:
+        user_data = await storage.get_user(user_id)
+        nickname = user_data.get('nickname', 'Unknown') if user_data else 'Unknown'
+        
+        await message.answer(
+            f"🔄 <b>Интерфейс обновлен!</b>\n\n"
+            f"👤 Привязанный аккаунт: <b>{nickname}</b>\n\n"
+            f"✨ <b>Новые функции:</b>\n"
+            f"• 📝 <b>История матчей</b> → ✏️ Ввести вручную\n"
+            f"• 📈 <b>Анализ формы</b> → ✏️ Свой период\n\n"
+            f"💡 Теперь вы можете указать любое количество матчей от 1 до 100!",
+            reply_markup=get_main_reply_keyboard(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "🔄 <b>Интерфейс обновлен!</b>\n\n"
+            "Сначала привяжите свой FACEIT профиль командой /start",
+            parse_mode="HTML"
+        )
+
+# Временные обработчики для старых кнопок ручного ввода (для помощи пользователям)
+# Удален блокирующий обработчик - теперь кастомный ввод работает
 
 @router.message(StateFilter(None))
 async def unknown_message(message: Message, state: FSMContext):

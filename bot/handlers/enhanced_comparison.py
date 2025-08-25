@@ -220,19 +220,23 @@ def format_enhanced_comparison(player1_stats: Dict[str, Any], player2_stats: Dic
     
     # 1v1
     clutch1v1_total1 = p1_stats.get('clutch_1v1_total', 0)
+    clutch1v1_wins1 = p1_stats.get('clutch_1v1_wins', 0)
     clutch1v1_pct1 = p1_stats.get('clutch_1v1_percentage', 0)
     clutch1v1_total2 = p2_stats.get('clutch_1v1_total', 0)
+    clutch1v1_wins2 = p2_stats.get('clutch_1v1_wins', 0)
     clutch1v1_pct2 = p2_stats.get('clutch_1v1_percentage', 0)
     ind1, ind2 = get_indicator(clutch1v1_pct1, clutch1v1_pct2)
-    text += f"1v1: {format_value_with_indicator(clutch1v1_total1, ind1, 0)} ({clutch1v1_pct1:.0f}% побед) | {format_value_with_indicator(clutch1v1_total2, ind2, 0)} ({clutch1v1_pct2:.0f}% побед)\n"
+    text += f"1v1: {format_value_with_indicator(clutch1v1_total1, ind1, 0)} ({clutch1v1_wins1} побед, {clutch1v1_pct1:.0f}%) | {format_value_with_indicator(clutch1v1_total2, ind2, 0)} ({clutch1v1_wins2} побед, {clutch1v1_pct2:.0f}%)\n"
     
     # 1v2
     clutch1v2_total1 = p1_stats.get('clutch_1v2_total', 0)
+    clutch1v2_wins1 = p1_stats.get('clutch_1v2_wins', 0)
     clutch1v2_pct1 = p1_stats.get('clutch_1v2_percentage', 0)
     clutch1v2_total2 = p2_stats.get('clutch_1v2_total', 0)
+    clutch1v2_wins2 = p2_stats.get('clutch_1v2_wins', 0)
     clutch1v2_pct2 = p2_stats.get('clutch_1v2_percentage', 0)
     ind1, ind2 = get_indicator(clutch1v2_pct1, clutch1v2_pct2)
-    text += f"1v2: {format_value_with_indicator(clutch1v2_total1, ind1, 0)} ({clutch1v2_pct1:.0f}% побед) | {format_value_with_indicator(clutch1v2_total2, ind2, 0)} ({clutch1v2_pct2:.0f}% побед)\n\n"
+    text += f"1v2: {format_value_with_indicator(clutch1v2_total1, ind1, 0)} ({clutch1v2_wins1} побед, {clutch1v2_pct1:.0f}%) | {format_value_with_indicator(clutch1v2_total2, ind2, 0)} ({clutch1v2_wins2} побед, {clutch1v2_pct2:.0f}%)\n\n"
     
     
     return text

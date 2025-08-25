@@ -38,22 +38,23 @@ def setup_routers():
         from bot.handlers import main_router, stats_router, match_router, profile_router, settings_router, new_match_history_router, form_analysis_router, last_match_router, current_match_router, comparison_router, help_router
         
         # Регистрируем роутеры в правильном порядке
-        # new_match_history_router должен быть ПЕРЕД main_router для приоритета reply-обработчиков
+        # Специализированные роутеры должны быть ПЕРЕД main_router для приоритета callback-обработчиков
         logger.info("📝 Registering new_match_history_router (ПЕРВЫЙ)")
         dp.include_router(new_match_history_router)
+        logger.info("📈 Registering form_analysis_router (ВТОРОЙ)")
+        dp.include_router(form_analysis_router)
         logger.info("🆚 Registering comparison_router (для FSM приоритета)")
         dp.include_router(comparison_router)
-        logger.info("🏠 Registering main_router (со catch-all)")
-        dp.include_router(main_router)
         logger.info("📊 Registering stats_router")
         dp.include_router(stats_router)
         dp.include_router(match_router)
         dp.include_router(profile_router)
-        dp.include_router(form_analysis_router)
         dp.include_router(last_match_router)
         dp.include_router(current_match_router)
         dp.include_router(help_router)
         dp.include_router(settings_router)
+        logger.info("🏠 Registering main_router (со catch-all) - ПОСЛЕДНИЙ")
+        dp.include_router(main_router)
         
         logger.info("✅ Роутеры успешно зарегистрированы")
         
@@ -71,7 +72,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"🔑 FACEIT API Key: {mask_sensitive_data(settings.faceit_api_key)}")
     
     # Настройка роутеров
+    logger.info(f"🔧 Before setup_routers: {len(dp.sub_routers)} routers")
     setup_routers()
+    logger.info(f"🔧 After setup_routers: {len(dp.sub_routers)} routers")
     
     # Инициализация базы данных
     try:
@@ -175,6 +178,11 @@ async def health_check():
         test_response = await faceit_client._make_request("/players", {"nickname": "test", "game": "cs2"})
         faceit_status = "ok" if test_response or True else "error"  # Игнорируем 404 для тестового запроса
         
+        # Проверяем что роутеры зарегистрированы
+        if len(dp.sub_routers) == 0:
+            logger.warning("⚠️ No routers registered, re-running setup_routers()")
+            setup_routers()
+        
         # Получаем статистику из базы данных
         db_stats = await storage.get_stats()
         
@@ -189,7 +197,11 @@ async def health_check():
                 "redis": "active",
                 "faceit_api": faceit_status
             },
-            "metrics": db_stats
+            "metrics": db_stats,
+            "routers": {
+                "registered_count": len(dp.sub_routers),
+                "router_names": [getattr(r, 'name', str(r)) for r in dp.sub_routers]
+            }
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -278,7 +290,7 @@ async def get_bot_stats():
     return {
         **db_stats,
         "uptime": await storage.get_current_time(),
-        "version": "2.1.0"
+        "version": "2.1.4"
     }
 
 @app.post("/webhook/faceit")
@@ -766,6 +778,14 @@ async def start_polling():
     """Запуск polling для бота"""
     try:
         logger.info("🤖 Запуск Telegram bot polling...")
+        logger.info(f"🔧 Routers at polling start: {len(dp.sub_routers)} routers")
+        
+        # Принудительная регистрация роутеров если их нет
+        if len(dp.sub_routers) == 0:
+            logger.warning("⚠️ No routers at polling start, re-running setup_routers()")
+            setup_routers()
+            logger.info(f"🔧 Routers after re-setup: {len(dp.sub_routers)} routers")
+        
         await dp.start_polling(
             bot, 
             allowed_updates=["message", "callback_query"],

@@ -45,33 +45,57 @@ def get_player_stats_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_match_history_keyboard() -> InlineKeyboardMarkup:
-    """Меню истории матчей - новая упрощенная версия"""
+    """Меню истории матчей с возможностью ручного ввода"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     builder = InlineKeyboardBuilder()
     
-    # 4 основные кнопки как просил пользователь
+    # 3 основные кнопки для фиксированного количества матчей
     builder.button(text="5 матчей", callback_data="history_5")
     builder.button(text="10 матчей", callback_data="history_10")
     builder.button(text="30 матчей", callback_data="history_30")
-    builder.button(text="✏️ Ввести вручную", callback_data="history_custom")
+    # Возвращаем кнопку ручного ввода (унифицированный текст с Reply)
+    builder.button(text="✏️ Ввести число", callback_data="history_custom")
     builder.button(text="🔙 Назад", callback_data="back_to_main")
     
-    builder.adjust(2, 2, 1)  # 2 кнопки в первых двух рядах, 1 кнопка назад
-    return builder.as_markup()
+    builder.adjust(3, 1, 1)  # 3 кнопки в первом ряду, потом по 1
+    keyboard = builder.as_markup()
+    
+    # Debug логирование
+    logger.info(f"🔍 Создана клавиатура истории матчей с {len(keyboard.inline_keyboard)} рядами:")
+    for i, row in enumerate(keyboard.inline_keyboard):
+        for j, button in enumerate(row):
+            logger.info(f"🔍   [{i}][{j}]: '{button.text}' -> {button.callback_data}")
+    
+    return keyboard
 
 
 def get_form_analysis_keyboard() -> InlineKeyboardMarkup:
-    """Меню анализа формы"""
+    """Меню анализа формы с возможностью ручного ввода"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     builder = InlineKeyboardBuilder()
     
     builder.button(text="📊 Анализ 10 матчей", callback_data="form_10")
     builder.button(text="📈 Анализ 20 матчей", callback_data="form_20")
     builder.button(text="📋 Анализ 50 матчей", callback_data="form_50")
-    builder.button(text="✏️ Ввести вручную", callback_data="form_custom")
+    # Возвращаем кнопку ручного ввода
+    builder.button(text="✏️ Свой период", callback_data="form_custom")
     builder.button(text="🔙 Назад", callback_data="back_to_main")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
     
-    builder.adjust(1, 1, 1, 1, 2)
-    return builder.as_markup()
+    builder.adjust(1, 1, 1, 1, 1, 1)  # по 1 кнопке в ряд для диагностики
+    keyboard = builder.as_markup()
+    
+    # Debug логирование
+    logger.info(f"🔍 Создана клавиатура анализа формы с {len(keyboard.inline_keyboard)} рядами:")
+    for i, row in enumerate(keyboard.inline_keyboard):
+        for j, button in enumerate(row):
+            logger.info(f"🔍   [{i}][{j}]: '{button.text}' -> {button.callback_data}")
+    
+    return keyboard
 
 
 def get_player_comparison_keyboard(show_comparison: bool = False) -> InlineKeyboardMarkup:
@@ -233,19 +257,18 @@ def get_current_match_analysis_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_number_input_keyboard(min_val: int, max_val: int, callback_prefix: str) -> InlineKeyboardMarkup:
-    """Клавиатура для ввода числа"""
+    """Клавиатура для ввода числа - без ручного ввода"""
     builder = InlineKeyboardBuilder()
     
-    # Добавляем кнопки с числами
+    # Добавляем кнопки с числами (максимум 10 кнопок)
     for i in range(min_val, min(max_val + 1, min_val + 10)):
         builder.button(text=str(i), callback_data=f"{callback_prefix}_{i}")
     
-    if max_val > min_val + 9:
-        builder.button(text="✏️ Ввести вручную", callback_data=f"{callback_prefix}_manual")
+    # Убрали кнопку "Ввести вручную" - только фиксированные варианты
     
     builder.button(text="🔙 Назад", callback_data="back_to_main")
     
-    builder.adjust(5, 5 if max_val > min_val + 9 else 0, 1)
+    builder.adjust(5, 5, 1)  # 5 кнопок в каждом ряду, потом назад
     return builder.as_markup()
 
 
@@ -296,30 +319,40 @@ def get_stats_reply_keyboard() -> ReplyKeyboardMarkup:
 
 
 def get_history_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Reply-клавиатура для истории матчей"""
+    """Reply-клавиатура для истории матчей с ручным вводом"""
     builder = ReplyKeyboardBuilder()
     
     builder.button(text="5 матчей")
     builder.button(text="10 матчей")
     builder.button(text="30 матчей")
+    # Возвращаем кнопку ручного ввода
     builder.button(text="✏️ Ввести число")
     builder.button(text="🔙 Назад")
     
-    builder.adjust(2, 2, 1)
+    builder.adjust(3, 1, 1)  # 3 кнопки матчей, 1 кнопка ввода, 1 кнопка назад
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 
 def get_form_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Reply-клавиатура для анализа формы"""
+    """Reply-клавиатура для анализа формы с ручным вводом"""
+    from aiogram.types import KeyboardButton
     builder = ReplyKeyboardBuilder()
     
-    builder.button(text="📊 Анализ 10 матчей")
-    builder.button(text="📈 Анализ 20 матчей")
-    builder.button(text="📋 Анализ 50 матчей")
-    builder.button(text="✏️ Свой период")
-    builder.button(text="🔙 Назад")
+    # Ряд 1: 2 кнопки
+    builder.row(
+        KeyboardButton(text="10 матчей"),
+        KeyboardButton(text="20 матчей")
+    )
     
-    builder.adjust(2, 2, 1)
+    # Ряд 2: 2 кнопки  
+    builder.row(
+        KeyboardButton(text="50 матчей"),
+        KeyboardButton(text="✏️ Свой период")
+    )
+    
+    # Ряд 3: 1 кнопка
+    builder.row(KeyboardButton(text="🔙 Назад"))
+    
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=False)
 
 

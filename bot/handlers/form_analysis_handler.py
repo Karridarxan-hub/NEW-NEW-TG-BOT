@@ -7,7 +7,7 @@ import logging
 import asyncio
 from datetime import datetime
 
-from keyboards import get_form_analysis_keyboard, get_main_menu_keyboard
+from keyboards import get_form_reply_keyboard, get_main_reply_keyboard
 from storage import storage
 from faceit_client import faceit_client
 
@@ -19,22 +19,25 @@ logger = logging.getLogger(__name__)
 
 # FSM состояния для анализа формы
 class FormAnalysisStates(StatesGroup):
-    waiting_for_custom_count = State()
+    waiting_for_custom_count = State()  # Восстанавливаем состояние для кастомного ввода
 
 # Обработчик открытия меню анализа формы
 @router.callback_query(F.data == "form_analysis")
 async def show_form_analysis_menu(callback: CallbackQuery, state: FSMContext):
     """Показать меню анализа формы"""
+    logger.info(f"🔍 Вызов меню анализа формы от пользователя {callback.from_user.id}")
     await state.clear()
     
-    await callback.message.edit_text(
+    keyboard = get_form_reply_keyboard()
+    logger.info(f"🔍 Создана Reply клавиатура для анализа формы")
+    
+    await callback.message.answer(
         "📈 <b>Анализ формы игрока</b>\n\n"
         "Выберите период для сравнения:\n"
         "• <i>10 vs 10</i> - последние 10 матчей против предыдущих 10\n"
         "• <i>20 vs 20</i> - последние 20 матчей против предыдущих 20\n"
-        "• <i>50 vs 50</i> - последние 50 матчей против предыдущих 50\n"
-        "• <i>Ввести вручную</i> - выбрать количество самостоятельно",
-        reply_markup=get_form_analysis_keyboard(),
+        "• <i>50 vs 50</i> - последние 50 матчей против предыдущих 50",
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
     await callback.answer()
@@ -50,53 +53,24 @@ async def analyze_form_fixed(callback: CallbackQuery, state: FSMContext):
     
     await perform_form_analysis(callback, match_count)
 
-# Обработчик для ввода пользовательского количества матчей
+# Обработчик для кнопки кастомного ввода
 @router.callback_query(F.data == "form_custom")
 async def ask_custom_form_count(callback: CallbackQuery, state: FSMContext):
-    """Запросить пользовательское количество матчей для анализа формы"""
+    """Запросить у пользователя кастомный период для анализа формы"""
+    logger.info(f"🎯 Пользователь {callback.from_user.id} нажал 'Свой период' (Inline callback) в form_analysis_handler")
+    await state.clear()
     await state.set_state(FormAnalysisStates.waiting_for_custom_count)
     
-    await callback.message.edit_text(
-        "✏️ <b>Анализ формы - ввод вручную</b>\n\n"
-        "Введите количество матчей для каждого периода (от 5 до 200):\n"
-        "Например: <code>25</code>\n\n"
-        "❗ Будет проведено сравнение последних N матчей с предыдущими N матчами",
+    await callback.message.answer(
+        "✏️ <b>Ввод периода для анализа</b>\n\n"
+        "Введите количество матчей для каждого периода (от 5 до 100):\n\n"
+        "💡 <i>Например: 25 (будет сравнение 25 vs 25 матчей)</i>\n\n"
+        "⚠️ <i>Общее количество матчей будет в два раза больше</i>",
         parse_mode="HTML"
     )
     await callback.answer()
 
-# Обработчик ввода пользовательского количества
-@router.message(FormAnalysisStates.waiting_for_custom_count)
-async def process_custom_form_count(message: Message, state: FSMContext):
-    """Обработать пользовательский ввод количества матчей"""
-    try:
-        match_count = int(message.text.strip())
-        
-        if not 5 <= match_count <= 200:
-            await message.answer(
-                "❌ Количество матчей должно быть от 5 до 200.\n"
-                "Попробуйте еще раз:"
-            )
-            return
-        
-        await state.clear()
-        
-        # Создаем фейковый callback для использования той же функции
-        class FakeCallback:
-            def __init__(self, message_obj, user_id):
-                self.message = message_obj
-                self.from_user = type('obj', (object,), {'id': user_id})()
-                
-            async def answer(self):
-                pass
-        
-        fake_callback = FakeCallback(message, message.from_user.id)
-        await perform_form_analysis(fake_callback, match_count)
-        
-    except ValueError:
-        await message.answer(
-            "❌ Неверный формат! Введите число от 5 до 200:"
-        )
+
 
 async def perform_form_analysis(callback, match_count: int):
     """Выполнить анализ формы игрока"""
@@ -106,15 +80,15 @@ async def perform_form_analysis(callback, match_count: int):
         faceit_id = await storage.get_user_faceit_id(user_id)
         
         if not faceit_id:
-            await callback.message.edit_text(
+            await callback.message.answer(
                 "❌ Профиль FACEIT не привязан!\n"
                 "Используйте /start для привязки профиля.",
-                reply_markup=get_form_analysis_keyboard()
+                reply_markup=get_form_reply_keyboard()
             )
             await callback.answer()
             return
         
-        await callback.message.edit_text(
+        await callback.message.answer(
             f"🔄 Анализирую форму игрока...\n"
             f"Загружаю {match_count * 2} матчей для сравнения..."
         )
@@ -122,9 +96,9 @@ async def perform_form_analysis(callback, match_count: int):
         # Получаем данные игрока
         player_details = await faceit_client.get_player_details(faceit_id)
         if not player_details:
-            await callback.message.edit_text(
+            await callback.message.answer(
                 "❌ Не удалось получить данные игрока.",
-                reply_markup=get_form_analysis_keyboard()
+                reply_markup=get_form_reply_keyboard()
             )
             await callback.answer()
             return
@@ -133,9 +107,9 @@ async def perform_form_analysis(callback, match_count: int):
         history_data = await faceit_client.get_player_history(faceit_id, limit=match_count * 2)
         
         if not history_data or not history_data.get("items"):
-            await callback.message.edit_text(
+            await callback.message.answer(
                 "❌ Не удалось загрузить историю матчей.",
-                reply_markup=get_form_analysis_keyboard()
+                reply_markup=get_form_reply_keyboard()
             )
             await callback.answer()
             return
@@ -147,10 +121,10 @@ async def perform_form_analysis(callback, match_count: int):
             adjusted_count = available_matches // 2
             
             if adjusted_count < 5:
-                await callback.message.edit_text(
+                await callback.message.answer(
                     f"❌ Недостаточно матчей для анализа.\n"
                     f"Доступно: {available_matches}, нужно минимум 10.",
-                    reply_markup=get_form_analysis_keyboard()
+                    reply_markup=get_form_reply_keyboard()
                 )
                 await callback.answer()
                 return
@@ -161,7 +135,7 @@ async def perform_form_analysis(callback, match_count: int):
         recent_matches = matches[:match_count]  # Последние N матчей
         previous_matches = matches[match_count:match_count * 2]  # Предыдущие N матчей
         
-        await callback.message.edit_text(
+        await callback.message.answer(
             f"📊 Получаю детальную статистику матчей...\n"
             f"Период 1: {len(recent_matches)} матчей\n"
             f"Период 2: {len(previous_matches)} матчей"
@@ -177,7 +151,7 @@ async def perform_form_analysis(callback, match_count: int):
             player_details.get('nickname', 'Unknown')
         )
         
-        await callback.message.edit_text(
+        await callback.message.answer(
             message_text,
             reply_markup=None,
             parse_mode="HTML",
@@ -186,13 +160,101 @@ async def perform_form_analysis(callback, match_count: int):
         
     except Exception as e:
         logger.error(f"Ошибка при анализе формы для пользователя {user_id}: {e}")
-        await callback.message.edit_text(
+        await callback.message.answer(
             "❌ Произошла ошибка при анализе формы.\n"
             "Попробуйте позже.",
             reply_markup=get_form_analysis_keyboard()
         )
     
     await callback.answer()
+
+async def perform_form_analysis_from_message(message: Message, match_count: int):
+    """Выполнить анализ формы игрока из сообщения (для кастомного ввода)"""
+    user_id = message.from_user.id
+    
+    try:
+        faceit_id = await storage.get_user_faceit_id(user_id)
+        
+        if not faceit_id:
+            await message.answer(
+                "❌ Профиль FACEIT не привязан!\n"
+                "Используйте /start для привязки профиля.",
+                reply_markup=get_form_reply_keyboard()
+            )
+            return
+        
+        loading_msg = await message.answer(
+            f"🔄 Анализирую форму игрока...\n"
+            f"Загружаю {match_count * 2} матчей для сравнения..."
+        )
+        
+        # Получаем данные игрока
+        player_details = await faceit_client.get_player_details(faceit_id)
+        if not player_details:
+            await loading_msg.edit_text(
+                "❌ Не удалось получить данные игрока.",
+                reply_markup=get_form_reply_keyboard()
+            )
+            return
+        
+        # Получаем историю матчей (нужно в два раза больше для сравнения)
+        history_data = await faceit_client.get_player_history(faceit_id, limit=match_count * 2)
+        
+        if not history_data or not history_data.get("items"):
+            await loading_msg.edit_text(
+                "❌ Не удалось загрузить историю матчей.",
+                reply_markup=get_form_reply_keyboard()
+            )
+            return
+        
+        matches = history_data["items"]
+        
+        if len(matches) < match_count * 2:
+            available_matches = len(matches)
+            adjusted_count = available_matches // 2
+            
+            if adjusted_count < 5:
+                await loading_msg.edit_text(
+                    f"❌ Недостаточно матчей для анализа.\n"
+                    f"Доступно: {available_matches}, нужно минимум 10."
+                )
+                return
+            
+            match_count = adjusted_count
+        
+        # Разделяем матчи на два периода
+        recent_matches = matches[:match_count]  # Последние N матчей
+        previous_matches = matches[match_count:match_count * 2]  # Предыдущие N матчей
+        
+        await loading_msg.edit_text(
+            f"📊 Получаю детальную статистику матчей...\n"
+            f"Период 1: {len(recent_matches)} матчей\n"
+            f"Период 2: {len(previous_matches)} матчей"
+        )
+        
+        # Анализируем оба периода
+        recent_stats = await analyze_matches_period(recent_matches, faceit_id, "Текущий период")
+        previous_stats = await analyze_matches_period(previous_matches, faceit_id, "Предыдущий период")
+        
+        # Формируем сообщение с результатами
+        message_text = await format_form_analysis_result(
+            recent_stats, previous_stats, match_count, 
+            player_details.get('nickname', 'Unknown')
+        )
+        
+        await loading_msg.edit_text(
+            message_text,
+            reply_markup=None,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при анализе формы для пользователя {user_id}: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при анализе формы.\n"
+            "Попробуйте позже."
+        )
 
 async def analyze_matches_period(matches: List[Dict], faceit_id: str, period_name: str) -> Dict[str, Any]:
     """Анализ статистики за определенный период матчей"""
@@ -360,7 +422,6 @@ async def format_form_analysis_result(
     recent_coverage = (recent_stats['detailed_matches'] / recent_stats['total_matches']) * 100 if recent_stats['total_matches'] > 0 else 0
     previous_coverage = (previous_stats['detailed_matches'] / previous_stats['total_matches']) * 100 if previous_stats['total_matches'] > 0 else 0
     
-    message += f"\n<i>📅 Обновлено: {datetime.now().strftime('%H:%M %d.%m.%Y')}</i>"
     
     return message
 
@@ -434,3 +495,55 @@ def safe_float(value: Any, default: float = 0.0) -> float:
         except (ValueError, TypeError):
             return default
     return default
+
+# FSM обработчик для кастомного ввода периода анализа
+@router.message(FormAnalysisStates.waiting_for_custom_count)
+async def process_custom_form_count(message: Message, state: FSMContext):
+    """Обработать введенное пользователем количество матчей для анализа формы"""
+    user_text = message.text.strip()
+    
+    try:
+        match_count = int(user_text)
+        
+        # Валидация диапазона (для анализа формы минимум 5 матчей за период)
+        if match_count < 5 or match_count > 100:
+            await message.answer(
+                "❌ <b>Некорректное число</b>\n\n"
+                "Количество матчей для каждого периода должно быть от 5 до 100.\n\n"
+                "💡 <i>Например: 25 (будет анализ 25 vs 25 матчей)</i>\n\n"
+                "Попробуйте еще раз:",
+                parse_mode="HTML"
+            )
+            return
+        
+        # Очищаем состояние
+        await state.clear()
+        
+        # Выполняем анализ формы через message
+        await perform_form_analysis_from_message(message, match_count)
+        
+    except ValueError:
+        await message.answer(
+            "❌ <b>Некорректный ввод</b>\n\n"
+            "Пожалуйста, введите число от 5 до 100.\n\n"
+            "💡 <i>Например: 25</i>",
+            parse_mode="HTML"
+        )
+
+# Reply-обработчик для кастомного ввода
+@router.message(F.text == "✏️ Свой период")
+async def handle_custom_form_input_reply(message: Message, state: FSMContext):
+    """Reply-обработчик кастомного ввода анализа формы"""
+    logger.info(f"🎯 Пользователь {message.from_user.id} нажал 'Свой период' (Reply) в form_analysis_handler")
+    
+    await state.clear()
+    await state.set_state(FormAnalysisStates.waiting_for_custom_count)
+    
+    await message.answer(
+        "✏️ <b>Ввод периода для анализа</b>\n\n"
+        "Введите количество матчей для каждого периода (от 5 до 100):\n\n"
+        "💡 <i>Например: 25 (будет сравнение 25 vs 25 матчей)</i>\n\n"
+        "⚠️ <i>Общее количество матчей будет в два раза больше</i>",
+        parse_mode="HTML"
+    )
+
