@@ -619,7 +619,7 @@ class FaceitAPIClient:
             'total_aces': total_penta_kills,  # Эйсы = Penta Kills
             'total_mvps': total_mvps,
             'total_rounds': total_rounds,
-            'multi_kills_per_match': round((total_triple_kills + total_quadro_kills + total_penta_kills) / max(correct_matches, 1), 3) if correct_matches > 0 else 0,
+            'multi_kills_per_match': round((total_triple_kills + total_quadro_kills + total_penta_kills) / max(correct_matches, 1), 1) if correct_matches > 0 else 0,
             
             # Клатчи из segments (приоритет CS2) с fallback на lifetime
             'clutch_1v1_total': clutch_1v1_total,

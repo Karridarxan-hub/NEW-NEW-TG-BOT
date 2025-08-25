@@ -550,7 +550,7 @@ async def handle_overall_stats_reply(message: Message):
 • **Эйсов (5к):** {formatted_stats.get('total_aces', 0)}
 • **4к убийств:** {formatted_stats.get('total_quadro_kills', 0)}
 • **3к убийств:** {formatted_stats.get('total_triple_kills', 0)}
-• **Мульти-килл за матч (3+):** {formatted_stats.get('multi_kills_per_match', 0):.3f}
+• **Мульти-килл за матч (3+):** {formatted_stats.get('multi_kills_per_match', 0):.1f}
 
 🏆 **Клатчи:**
 • **1v1:** {formatted_stats.get('clutch_1v1_total', 0)} ({formatted_stats.get('clutch_1v1_percentage', 0):.0f}% побед)

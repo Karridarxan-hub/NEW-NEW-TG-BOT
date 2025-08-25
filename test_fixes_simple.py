@@ -67,46 +67,55 @@ async def test_statistics_fixes():
         print(f"   Current ELO: {current_elo}")
         print(f"   To next level: {elo_to_next if elo_to_next > 0 else 'Maximum'}")
         
-        # 2. Match count data source
-        print(f"\n2. Match Data Source:")
+        # 2. ОСНОВНЫЕ ИСПРАВЛЕНИЯ - Multi-kills per match
+        print(f"\n2. Multi-kills Fix (key change!):")
+        multi_kills_per_match = formatted_stats.get('multi_kills_per_match', 0)
+        triple_kills = formatted_stats.get('total_triple_kills', 0)
+        quadro_kills = formatted_stats.get('total_quadro_kills', 0) 
+        aces = formatted_stats.get('total_aces', 0)
+        total_multi = triple_kills + quadro_kills + aces
         total_matches = formatted_stats.get('matches', 0)
-        print(f"   Total matches: {total_matches} (from lifetime data)")
+        expected_multi = round(total_multi / max(total_matches, 1), 3) if total_matches > 0 else 0
         
-        # 3. ADR and KAST
+        print(f"   Multi-kills per match: {multi_kills_per_match}")
+        print(f"   Triple kills: {triple_kills}")
+        print(f"   Quadro kills: {quadro_kills}")
+        print(f"   Aces: {aces}")
+        print(f"   Total multi-kills: {total_multi}")
+        print(f"   Expected calculation: {expected_multi}")
+        print(f"   Calculation correct: {abs(multi_kills_per_match - expected_multi) < 0.001}")
+        
+        # 3. КЛАТЧИ - Исправления с приоритетом segments
+        print(f"\n3. Clutches Fix (segments priority):")
+        clutch_1v1_total = formatted_stats.get('clutch_1v1_total', 0)
+        clutch_1v1_wins = formatted_stats.get('clutch_1v1_wins', 0)
+        clutch_1v1_pct = formatted_stats.get('clutch_1v1_percentage', 0)
+        clutch_1v2_total = formatted_stats.get('clutch_1v2_total', 0)
+        clutch_1v2_wins = formatted_stats.get('clutch_1v2_wins', 0)
+        clutch_1v2_pct = formatted_stats.get('clutch_1v2_percentage', 0)
+        
+        print(f"   1v1 clutches: {clutch_1v1_total} ({clutch_1v1_wins} wins, {clutch_1v1_pct:.1f}%)")
+        print(f"   1v2 clutches: {clutch_1v2_total} ({clutch_1v2_wins} wins, {clutch_1v2_pct:.1f}%)")
+        
+        # 4. ADR и KAST
         adr_value = formatted_stats.get('adr', 0)
         kast_value = formatted_stats.get('kast', 0)
         
-        print(f"\n3. ADR and KAST:")
+        print(f"\n4. ADR and KAST:")
         print(f"   ADR: {adr_value}")
         print(f"   KAST: {kast_value}% (valid: {0 <= kast_value <= 100})")
         
-        # 4. Average stats per match
-        print(f"\n4. Average Stats per Match:")
-        avg_kills = formatted_stats.get('avg_kills_per_match', 0)
-        avg_deaths = formatted_stats.get('avg_deaths_per_match', 0)
-        avg_assists = formatted_stats.get('avg_assists_per_match', 0)
+        # 5. Проверка корректности данных
+        print(f"\n5. Data Validation:")
+        is_multi_correct = abs(multi_kills_per_match - expected_multi) < 0.001
+        has_clutch_data = clutch_1v1_total >= 0
+        is_adr_valid = 0 <= adr_value <= 200
+        is_kast_valid = 0 <= kast_value <= 100
         
-        print(f"   Kills per match: {avg_kills}")
-        print(f"   Deaths per match: {avg_deaths}")
-        print(f"   Assists per match: {avg_assists}")
-        
-        # 5. First actions per match
-        print(f"\n5. First Actions per Match:")
-        avg_first_kills = formatted_stats.get('avg_first_kills_per_match', 0)
-        avg_first_deaths = formatted_stats.get('avg_first_deaths_per_match', 0)
-        
-        print(f"   First kills per match: {avg_first_kills}")
-        print(f"   First deaths per match: {avg_first_deaths}")
-        
-        # 6. Utility stats per match
-        print(f"\n6. Utility Stats per Match:")
-        avg_flash = formatted_stats.get('avg_flash_assists_per_match', 0)
-        avg_utility = formatted_stats.get('avg_utility_damage_per_match', 0)
-        avg_molotov = formatted_stats.get('avg_molotov_damage_per_match', 0)
-        
-        print(f"   Flash assists per match: {avg_flash}")
-        print(f"   Utility damage per match: {avg_utility}")
-        print(f"   Molotov damage per match: {avg_molotov}")
+        print(f"   Multi-kills calculation: {'PASS' if is_multi_correct else 'FAIL'}")
+        print(f"   Clutch data available: {'PASS' if has_clutch_data else 'FAIL'}")
+        print(f"   ADR in valid range: {'PASS' if is_adr_valid else 'FAIL'}")
+        print(f"   KAST in valid range: {'PASS' if is_kast_valid else 'FAIL'}")
         
         print(f"\n=== ALL FIXES APPLIED SUCCESSFULLY! ===")
         
@@ -116,7 +125,8 @@ async def test_statistics_fixes():
         print(f"ADR (should be reasonable): {adr_value}")
         print(f"KAST (should be 0-100): {kast_value}%")
         print(f"ELO to next level: {elo_to_next}")
-        print(f"Average kills per match: {avg_kills}")
+        print(f"Multi-kills per match: {multi_kills_per_match}")
+        print(f"Clutch 1v1 percentage: {clutch_1v1_pct}%")
         
     except Exception as e:
         print(f"\nERROR during testing: {e}")

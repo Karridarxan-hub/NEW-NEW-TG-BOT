@@ -213,7 +213,7 @@ def format_enhanced_comparison(player1_stats: Dict[str, Any], player2_stats: Dic
     multi1 = p1_stats.get('multi_kills_per_match', 0)
     multi2 = p2_stats.get('multi_kills_per_match', 0)
     ind1, ind2 = get_indicator(multi1, multi2)
-    text += f"Мульти-килл за матч (3+): {format_value_with_indicator(multi1, ind1, 3)} | {format_value_with_indicator(multi2, ind2, 3)}\n\n"
+    text += f"Мульти-килл за матч (3+): {format_value_with_indicator(multi1, ind1, 1)} | {format_value_with_indicator(multi2, ind2, 1)}\n\n"
     
     # Клатчи
     text += "🏆 <b>Клатчи:</b>\n"
